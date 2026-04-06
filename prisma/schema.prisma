@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── NextAuth Models ───
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  timezone      String    @default("America/New_York")
+  accounts      Account[]
+  sessions      Session[]
+  emails        Email[]
+  events        Event[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Lumi Models ───
+
+model Email {
+  id         String   @id @default(cuid())
+  userId     String
+  messageId  String   @unique // Gmail Message-ID header for dedup
+  threadId   String?
+  from       String
+  subject    String
+  bodyText   String?  @db.Text
+  bodyHtml   String?  @db.Text
+  receivedAt DateTime
+  hasIcs     Boolean  @default(false)
+  processed  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events Event[]
+
+  @@index([userId, processed])
+  @@index([messageId])
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  userId      String
+  emailId     String?
+  status      EventStatus @default(PENDING)
+  confidence  Float       @default(0)
+  detectedVia DetectionMethod
+
+  // Core fields
+  title       String
+  description String?     @db.Text
+  date        String      // ISO date: 2026-03-28
+  startTime   DateTime    // Full ISO 8601 with offset
+  endTime     DateTime?
+  timezone    String      @default("America/New_York")
+  isAllDay    Boolean     @default(false)
+
+  // Location
+  locationType    LocationType?
+  locationName    String?
+  locationAddress String?
+  locationLat     Float?
+  locationLng     Float?
+  virtualUrl      String?
+  virtualPlatform String?
+
+  // Organizer
+  organizerName    String?
+  organizerEmail   String?
+  organizerCompany String?
+
+  // Extras
+  attire    String?
+  rsvpLink  String?
+  rsvpDeadline DateTime?
+
+  // Recurrence
+  recurrenceRule String? // RRULE string
+
+  // Calendar sync
+  calendarEventId String? // Google Calendar event ID after sync
+  reminderJobId   String? // BullMQ job ID for Maybe reminders
+
+  // Conflict detection
+  conflictIds String[] @default([])
+
+  // Dedup
+  dedupHash String? // hash(title + date + organizerEmail)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email Email? @relation(fields: [emailId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([userId, date])
+  @@index([dedupHash])
+}
+
+enum EventStatus {
+  PENDING
+  ACCEPTED
+  MAYBE
+  DECLINED
+  ARCHIVED
+}
+
+enum DetectionMethod {
+  ICS
+  SCHEMA_ORG
+  KEYWORD
+  LLM
+}
+
+enum LocationType {
+  PHYSICAL
+  VIRTUAL
+  HYBRID
+}

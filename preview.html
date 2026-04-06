@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Lumi — Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          'lumi-bg':      '#0b0b0f',
+          'lumi-surface': '#14141b',
+          'lumi-border':  '#23232d',
+          'lumi-text':    '#e9e9ee',
+          'lumi-muted':   '#8a8a99',
+          'lumi-accent':  '#a3e635',
+          'lumi-blue':    '#60a5fa',
+          'lumi-amber':   '#fbbf24',
+          'lumi-rose':    '#fb7185',
+        },
+        fontFamily: {
+          sans:  ['Inter','ui-sans-serif','system-ui'],
+          serif: ['Fraunces','ui-serif','Georgia'],
+          mono:  ['ui-monospace','SFMono-Regular','monospace'],
+        },
+      }
+    }
+  }
+</script>
+<style>
+  body { background:#0b0b0f; color:#e9e9ee; font-family:'Inter',system-ui,sans-serif; }
+  .scroll-area::-webkit-scrollbar { width:8px; }
+  .scroll-area::-webkit-scrollbar-thumb { background:#23232d; border-radius:4px; }
+  .card-enter { animation: fade .25s ease-out; }
+  @keyframes fade { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:none;} }
+  kbd { font-family:ui-monospace,monospace; }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- Header -->
+<header class="sticky top-0 z-50 bg-lumi-bg/80 backdrop-blur-lg border-b border-lumi-border">
+  <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-lumi-accent to-lumi-blue flex items-center justify-center text-base">📬</div>
+      <h1 class="font-serif text-xl font-medium tracking-tight">Lumi</h1>
+      <span class="text-[10px] uppercase tracking-widest text-lumi-muted border border-lumi-border rounded px-1.5 py-0.5">preview</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="text-sm text-lumi-muted hidden sm:inline">you@example.com</span>
+      <div class="w-8 h-8 rounded-full border border-lumi-border bg-gradient-to-br from-lumi-blue to-lumi-accent"></div>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 max-w-6xl mx-auto w-full px-6 py-6">
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+
+    <!-- Event Feed -->
+    <section>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="font-serif text-2xl">Inbox</h2>
+          <p class="text-sm text-lumi-muted" id="feed-summary">Loading…</p>
+        </div>
+        <div class="flex items-center gap-1 text-xs bg-lumi-surface border border-lumi-border rounded-lg p-1">
+          <button data-filter="ALL"      class="filter-btn px-3 py-1 rounded-md">All</button>
+          <button data-filter="PENDING"  class="filter-btn px-3 py-1 rounded-md">Pending</button>
+          <button data-filter="ACCEPTED" class="filter-btn px-3 py-1 rounded-md">Going</button>
+          <button data-filter="MAYBE"    class="filter-btn px-3 py-1 rounded-md">Maybe</button>
+          <button data-filter="DECLINED" class="filter-btn px-3 py-1 rounded-md">Declined</button>
+        </div>
+      </div>
+      <div id="feed" class="scroll-area space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-2"></div>
+    </section>
+
+    <!-- Sidebar -->
+    <aside class="hidden lg:flex flex-col gap-4">
+      <div class="rounded-xl border border-lumi-border bg-lumi-surface p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-lumi-muted">April 2026</h3>
+          <div class="flex gap-1">
+            <button class="w-6 h-6 rounded hover:bg-lumi-bg text-lumi-muted">‹</button>
+            <button class="w-6 h-6 rounded hover:bg-lumi-bg text-lumi-muted">›</button>
+          </div>
+        </div>
+        <div id="mini-cal" class="grid grid-cols-7 gap-1 text-center text-[11px]"></div>
+      </div>
+
+      <div class="rounded-xl border border-lumi-border bg-lumi-surface p-4">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-lumi-muted mb-3">This Month</h3>
+        <div class="space-y-2" id="stats"></div>
+      </div>
+
+      <div class="rounded-xl border border-lumi-border bg-lumi-surface p-4">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-lumi-muted mb-3">Pipeline</h3>
+        <ol class="space-y-2 text-xs text-lumi-muted">
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-lumi-accent"></span>Ingest</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-lumi-accent"></span>Detect</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-lumi-accent"></span>Extract</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-lumi-blue animate-pulse"></span>Awaiting decision</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-lumi-border"></span>Calendar sync</li>
+        </ol>
+      </div>
+
+      <div class="rounded-xl border border-lumi-border bg-lumi-surface p-4">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-lumi-muted mb-3">Shortcuts</h3>
+        <div class="space-y-2 text-xs text-lumi-muted">
+          <div class="flex justify-between"><span>Navigate</span><kbd class="px-1.5 py-0.5 rounded bg-lumi-bg border border-lumi-border text-[10px]">↑↓</kbd></div>
+          <div class="flex justify-between"><span>Attend</span><kbd class="px-1.5 py-0.5 rounded bg-lumi-bg border border-lumi-border text-[10px]">A</kbd></div>
+          <div class="flex justify-between"><span>Maybe</span><kbd class="px-1.5 py-0.5 rounded bg-lumi-bg border border-lumi-border text-[10px]">M</kbd></div>
+          <div class="flex justify-between"><span>Decline</span><kbd class="px-1.5 py-0.5 rounded bg-lumi-bg border border-lumi-border text-[10px]">D</kbd></div>
+          <div class="flex justify-between"><span>Open</span><kbd class="px-1.5 py-0.5 rounded bg-lumi-bg border border-lumi-border text-[10px]">↵</kbd></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<!-- Detail panel -->
+<div id="panel-bg" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-40" onclick="closePanel()"></div>
+<aside id="panel" class="fixed top-0 right-0 h-full w-full sm:w-[440px] bg-lumi-surface border-l border-lumi-border z-50 translate-x-full transition-transform duration-300 overflow-y-auto"></aside>
+
+<script>
+const events = [
+  { id:1, title:"Changemaker Fellowship 2026 Application", from:"fellowships@nyu.edu", date:"2026-04-24", time:"23:59", end:"23:59",
+    location:"Online application", organizer:"NYU Changemaker", attire:"—", rsvp:"2026-04-24",
+    status:"PENDING", confidence:0.95, source:"LLM",
+    snippet:"Awards grants of up to $5,000 for approximately 35 students working in areas of public service, social impact, and economic or racial inequality." },
+  { id:2, title:"Podcasting 101: Pitch Perfect", from:"wasserman@nyu.edu", date:"2026-04-07", time:"14:30", end:"16:30",
+    location:"Wasserman Center, Presentation Room B", organizer:"Wasserman Center", attire:"—", rsvp:"—",
+    status:"PENDING", confidence:0.97, source:"schema.org",
+    snippet:"Four-part series on producing a podcast, from pitching to publication. Pitch Perfect introduces the four key components of a good pitch." },
+  { id:3, title:"Wasserman Industry-Based Career Communities", from:"wasserman@nyu.edu", date:"2026-04-30", time:"00:00", end:"23:59",
+    location:"Online sign-up", organizer:"Wasserman Center", attire:"—", rsvp:"—",
+    status:"MAYBE", confidence:0.82, source:"keyword",
+    snippet:"Career Communities help you explore career paths, prepare for the job search, and connect with opportunities based on chosen industries." },
+  { id:4, title:"Abercrombie & Fitch Co. Tabling", from:"recruiting@abercrombie.com", date:"2026-04-07", time:"13:00", end:"15:00",
+    location:"Palladium Lobby – Wasserman Union Square", organizer:"Abercrombie & Fitch", attire:"Casual", rsvp:"—",
+    status:"PENDING", confidence:0.94, source:"ICS",
+    snippet:"Hiring Part-Time Sales Associates for the new 3-story Soho flagship opening this summer. Stop by to meet the team." },
+  { id:5, title:"Verizon: Coffee Chat", from:"university.relations@verizon.com", date:"2026-04-14", time:"10:00", end:"13:00",
+    location:"Interview Room 7 – Wasserman Union Square", organizer:"Justin (Verizon)", attire:"Business casual", rsvp:"2026-04-13",
+    status:"PENDING", confidence:0.96, source:"ICS",
+    snippet:"Meet one-on-one with Justin, Verizon's University Relations Lead — career paths, resume feedback, upcoming events, and networking." },
+  { id:6, title:"Job Search Drop-Ins", from:"wasserman@nyu.edu", date:"2026-04-06", time:"11:00", end:"12:00",
+    location:"Wasserman Union Square – Career Commons", organizer:"Wasserman Center", attire:"—", rsvp:"—",
+    status:"ACCEPTED", confidence:0.93, source:"schema.org",
+    snippet:"Stop by the Wasserman Center for tips and guidance on your job search. Get your resume reviewed and plan your strategy." },
+  { id:7, title:"Global Job Search: Careers in Europe & Singapore", from:"wasserman@nyu.edu", date:"2026-04-07", time:"10:30", end:"12:00",
+    location:"Virtual", organizer:"Wasserman Center", attire:"—", rsvp:"—",
+    status:"PENDING", confidence:0.91, source:"LLM",
+    snippet:"Practical next steps for your global career journey and how to navigate work visa options for Europe and Singapore." },
+  { id:8, title:"Crafting Your Personal Pitch for Networking Success", from:"wasserman@nyu.edu", date:"2026-04-07", time:"17:00", end:"18:00",
+    location:"Wasserman Union Square – Presentation Room A", organizer:"Wasserman Career Ambassadors", attire:"—", rsvp:"—",
+    status:"PENDING", confidence:0.95, source:"schema.org",
+    snippet:"Peer-led workshop on pitch essentials. Draft and practice a personal pitch you can use in any networking situation." },
+  { id:9, title:"Employee Rights in the Workplace for International Students", from:"wasserman@nyu.edu", date:"2026-04-08", time:"11:00", end:"12:00",
+    location:"Virtual", organizer:"Wasserman Center", attire:"—", rsvp:"—",
+    status:"PENDING", confidence:0.92, source:"LLM",
+    snippet:"Understand your rights as an employee, anti-discrimination protections, sponsorship questions, and how to spot scams." },
+  { id:10, title:"From Vision to Venture: Starting Your Arts Startup", from:"productionlab@nyu.edu", date:"2026-04-08", time:"18:30", end:"19:30",
+    location:"NYU Production Lab – Lower Level Event Space", organizer:"NYU Production Lab", attire:"—", rsvp:"—",
+    status:"PENDING", confidence:0.89, source:"keyword",
+    snippet:"Your art deserves a business plan. Session on arts startups — turn your big ideas into reality." },
+  { id:11, title:"Job Search Drop-Ins", from:"wasserman@nyu.edu", date:"2026-04-13", time:"11:00", end:"12:00",
+    location:"Wasserman Union Square – Career Commons", organizer:"Wasserman Center", attire:"—", rsvp:"—",
+    status:"PENDING", confidence:0.93, source:"schema.org",
+    snippet:"Stop by for resume reviews and job search strategy guidance." },
+  { id:12, title:"Mastering the Informational Interview or Coffee Chat", from:"wasserman@nyu.edu", date:"2026-04-14", time:"17:30", end:"19:00",
+    location:"Wasserman Union Square – Presentation Room A", organizer:"Wasserman Center", attire:"Business casual", rsvp:"—",
+    status:"PENDING", confidence:0.96, source:"ICS",
+    snippet:"Hear from employers on initiating coffee chats, conducting conversations, and building connections." },
+  { id:13, title:"Grants for Artists: From Search to Submission", from:"productionlab@nyu.edu", date:"2026-04-15", time:"18:30", end:"19:30",
+    location:"NYU Production Lab – Lower Level Event Space", organizer:"NYU Production Lab", attire:"—", rsvp:"—",
+    status:"PENDING", confidence:0.9, source:"keyword",
+    snippet:"Interactive workshop breaking down the grant process step by step for artists." },
+  { id:14, title:"Social Impact Career Pathways Panel", from:"wasserman@nyu.edu", date:"2026-04-16", time:"17:30", end:"19:00",
+    location:"Wasserman Union Square – Presentation Room A", organizer:"Wasserman Center", attire:"Business casual", rsvp:"—",
+    status:"MAYBE", confidence:0.94, source:"schema.org",
+    snippet:"Panel of professionals on building values-aligned careers in social impact. Networking after." },
+];
+
+let filter = 'ALL';
+let selected = 0;
+
+const STATUS = {
+  PENDING:  { label:'Pending',  cls:'text-lumi-muted    border-lumi-border' },
+  ACCEPTED: { label:'Going',    cls:'text-lumi-accent   border-lumi-accent/30 bg-lumi-accent/5' },
+  MAYBE:    { label:'Maybe',    cls:'text-lumi-amber    border-lumi-amber/30 bg-lumi-amber/5' },
+  DECLINED: { label:'Declined', cls:'text-lumi-rose     border-lumi-rose/30 bg-lumi-rose/5' },
+};
+
+function fmtDate(d){
+  const date = new Date(d+'T00:00');
+  return date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+}
+
+function visible(){
+  return events.filter(e => filter==='ALL' || e.status===filter);
+}
+
+function render(){
+  const list = visible();
+  const feed = document.getElementById('feed');
+  feed.innerHTML = list.map((e,i)=>{
+    const s = STATUS[e.status];
+    const isSel = i===selected;
+    return `
+    <article class="card-enter cursor-pointer rounded-xl border ${isSel?'border-lumi-accent/60 bg-lumi-surface':'border-lumi-border bg-lumi-surface/60'} hover:bg-lumi-surface transition-colors p-4" onclick="select(${i});openPanel()">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="inline-block px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded border ${s.cls}">${s.label}</span>
+            <span class="text-[10px] text-lumi-muted">via ${e.source} · ${(e.confidence*100|0)}%</span>
+          </div>
+          <h3 class="font-serif text-lg leading-snug truncate">${e.title}</h3>
+          <p class="text-xs text-lumi-muted truncate mt-0.5">${e.from}</p>
+          <p class="text-sm text-lumi-muted mt-2 line-clamp-2">${e.snippet}</p>
+        </div>
+        <div class="text-right shrink-0">
+          <div class="text-sm font-medium">${fmtDate(e.date)}</div>
+          <div class="text-xs text-lumi-muted">${e.time}</div>
+          <div class="text-[10px] text-lumi-muted mt-1">${e.location.split(',')[0]}</div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-3" onclick="event.stopPropagation()">
+        <button onclick="setStatus(${e.id},'ACCEPTED')" class="flex-1 text-xs py-1.5 rounded-md border border-lumi-border hover:bg-lumi-accent/10 hover:border-lumi-accent/50 hover:text-lumi-accent transition-colors">Attend</button>
+        <button onclick="setStatus(${e.id},'MAYBE')"    class="flex-1 text-xs py-1.5 rounded-md border border-lumi-border hover:bg-lumi-amber/10 hover:border-lumi-amber/50 hover:text-lumi-amber transition-colors">Maybe</button>
+        <button onclick="setStatus(${e.id},'DECLINED')" class="flex-1 text-xs py-1.5 rounded-md border border-lumi-border hover:bg-lumi-rose/10 hover:border-lumi-rose/50 hover:text-lumi-rose transition-colors">Decline</button>
+      </div>
+    </article>`;
+  }).join('') || `<div class="text-center text-sm text-lumi-muted py-16">No events</div>`;
+
+  document.getElementById('feed-summary').textContent =
+    `${list.length} event${list.length===1?'':'s'} · ${events.filter(e=>e.status==='PENDING').length} awaiting decision`;
+
+  document.querySelectorAll('.filter-btn').forEach(b=>{
+    b.classList.toggle('bg-lumi-bg', b.dataset.filter===filter);
+    b.classList.toggle('text-lumi-text', b.dataset.filter===filter);
+    b.classList.toggle('text-lumi-muted', b.dataset.filter!==filter);
+  });
+
+  // stats
+  const stats = [
+    ['Going',     events.filter(e=>e.status==='ACCEPTED').length, 'text-lumi-accent'],
+    ['Maybe',     events.filter(e=>e.status==='MAYBE').length,    'text-lumi-amber'],
+    ['Pending',   events.filter(e=>e.status==='PENDING').length,  'text-lumi-blue'],
+    ['Declined',  events.filter(e=>e.status==='DECLINED').length, 'text-lumi-rose'],
+  ];
+  document.getElementById('stats').innerHTML = stats.map(([l,v,c])=>
+    `<div class="flex justify-between items-center"><span class="text-sm text-lumi-muted">${l}</span><span class="text-sm font-semibold ${c}">${v}</span></div>`
+  ).join('');
+}
+
+function select(i){ selected=i; render(); }
+
+function setStatus(id,status){
+  const e = events.find(x=>x.id===id);
+  if(e){ e.status=status; render(); }
+}
+
+function openPanel(){
+  const e = visible()[selected]; if(!e) return;
+  const s = STATUS[e.status];
+  document.getElementById('panel').innerHTML = `
+    <div class="p-6">
+      <button onclick="closePanel()" class="text-lumi-muted hover:text-lumi-text text-sm mb-4">← Back</button>
+      <span class="inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider rounded border ${s.cls} mb-3">${s.label}</span>
+      <h2 class="font-serif text-2xl mb-1">${e.title}</h2>
+      <p class="text-sm text-lumi-muted mb-6">${e.from}</p>
+      <dl class="space-y-3 text-sm">
+        ${row('When', `${fmtDate(e.date)} · ${e.time}–${e.end}`)}
+        ${row('Where', e.location)}
+        ${row('Organizer', e.organizer)}
+        ${row('Attire', e.attire)}
+        ${row('RSVP by', e.rsvp)}
+        ${row('Detected via', `${e.source} (${(e.confidence*100|0)}% confidence)`)}
+      </dl>
+      <div class="mt-6 p-3 rounded-lg bg-lumi-bg border border-lumi-border text-sm text-lumi-muted leading-relaxed">${e.snippet}</div>
+      <div class="flex gap-2 mt-6">
+        <button onclick="setStatus(${e.id},'ACCEPTED');openPanel()" class="flex-1 py-2 rounded-md bg-lumi-accent/10 border border-lumi-accent/40 text-lumi-accent text-sm hover:bg-lumi-accent/20">Attend</button>
+        <button onclick="setStatus(${e.id},'MAYBE');openPanel()"    class="flex-1 py-2 rounded-md bg-lumi-amber/10 border border-lumi-amber/40 text-lumi-amber text-sm hover:bg-lumi-amber/20">Maybe</button>
+        <button onclick="setStatus(${e.id},'DECLINED');openPanel()" class="flex-1 py-2 rounded-md bg-lumi-rose/10 border border-lumi-rose/40 text-lumi-rose text-sm hover:bg-lumi-rose/20">Decline</button>
+      </div>
+    </div>`;
+  document.getElementById('panel').classList.remove('translate-x-full');
+  document.getElementById('panel-bg').classList.remove('hidden');
+}
+function closePanel(){
+  document.getElementById('panel').classList.add('translate-x-full');
+  document.getElementById('panel-bg').classList.add('hidden');
+}
+function row(k,v){ return `<div class="flex justify-between gap-4 border-b border-lumi-border pb-2"><dt class="text-lumi-muted">${k}</dt><dd class="text-right">${v}</dd></div>`; }
+
+// Mini calendar (April 2026, starts Wed)
+function buildCal(){
+  const cal = document.getElementById('mini-cal');
+  const dows = ['S','M','T','W','T','F','S'];
+  const eventDays = new Set(events.filter(e=>e.date.startsWith('2026-04')).map(e=>+e.date.split('-')[2]));
+  const today = 6;
+  let html = dows.map(d=>`<div class="text-lumi-muted">${d}</div>`).join('');
+  // April 1, 2026 is Wednesday (index 3)
+  for(let i=0;i<3;i++) html += `<div></div>`;
+  for(let d=1;d<=30;d++){
+    const has = eventDays.has(d);
+    const isT = d===today;
+    html += `<div class="aspect-square flex items-center justify-center rounded ${isT?'bg-lumi-accent text-lumi-bg font-semibold':has?'text-lumi-accent':'text-lumi-muted'} hover:bg-lumi-bg cursor-pointer">${d}</div>`;
+  }
+  cal.innerHTML = html;
+}
+
+document.querySelectorAll('.filter-btn').forEach(b=>{
+  b.onclick = ()=>{ filter=b.dataset.filter; selected=0; render(); };
+});
+
+document.addEventListener('keydown',(e)=>{
+  const list = visible();
+  if(e.key==='Escape') return closePanel();
+  if(e.key==='ArrowDown'){ selected=Math.min(selected+1,list.length-1); render(); }
+  if(e.key==='ArrowUp'){   selected=Math.max(selected-1,0); render(); }
+  if(e.key==='Enter') openPanel();
+  const ev = list[selected]; if(!ev) return;
+  if(e.key.toLowerCase()==='a') setStatus(ev.id,'ACCEPTED');
+  if(e.key.toLowerCase()==='m') setStatus(ev.id,'MAYBE');
+  if(e.key.toLowerCase()==='d') setStatus(ev.id,'DECLINED');
+});
+
+buildCal();
+render();
+</script>
+</body>
+</html>
