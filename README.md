@@ -73,61 +73,93 @@ Email arrives → Detection → LLM Extraction → Event Card → User decides �
 ### Prerequisites
 
 - Node.js 20+
-- PostgreSQL 16+
-- Redis 7+
-- Google Cloud project with Gmail + Calendar APIs enabled
-- Anthropic API key
+- Docker (for local Postgres + Redis) OR your own hosted services
+- Google Cloud project with Gmail + Calendar APIs enabled (optional — demo mode works without)
+- Anthropic API key (optional — demo mode works without)
+
+### Three modes
+
+Lumi runs in three modes depending on which credentials you've provided:
+
+| Mode           | DB / Redis | Google OAuth | Anthropic | What works                                          |
+|----------------|------------|--------------|-----------|-----------------------------------------------------|
+| **Demo**       | —          | —            | —         | Full UI against mock data (default, no setup)       |
+| **Persisted**  | ✓          | —            | —         | UI writes to real DB; sample data via seed          |
+| **Live**       | ✓          | ✓            | ✓         | Gmail ingestion + Claude extraction + Calendar sync |
 
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/yourname/lumi.git
-cd lumi
+git clone https://github.com/anniehyd/Lumi.git
+cd Lumi
 npm install
 ```
 
-### 2. Set up environment
+### 2. Configure environment
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Fill in the values in `.env.local` (see [Environment Variables](#environment-variables) below).
+For demo mode, no edits needed. For persisted/live, fill in the relevant keys
+(see [Environment Variables](#environment-variables)).
 
-### 3. Set up database
+### 3. Start infra (persisted + live modes)
 
 ```bash
+docker compose up -d        # Postgres on 5432, Redis on 6379
 npx prisma migrate dev --name init
-npx prisma generate
+npm run db:seed             # loads the NYU Wasserman newsletter demo
 ```
 
-### 4. Run development server
+### 4. Run the app
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). In demo mode the inbox
+populates immediately from mock data; in live mode it populates after the first
+Gmail scan.
 
-### 5. (Optional) Start the worker for background jobs
+### 5. Start the worker (live mode)
 
 ```bash
 npm run worker
 ```
 
+Handles ingestion jobs and Maybe-reminders from the BullMQ queues.
+
 ## Environment Variables
 
-| Variable                         | Description                          |
-|----------------------------------|--------------------------------------|
-| `DATABASE_URL`                   | Postgres connection string           |
-| `REDIS_URL`                      | Redis connection string              |
-| `NEXTAUTH_URL`                   | App URL (http://localhost:3000)      |
-| `NEXTAUTH_SECRET`                | Random secret for NextAuth           |
-| `GOOGLE_CLIENT_ID`               | Google OAuth client ID               |
-| `GOOGLE_CLIENT_SECRET`           | Google OAuth client secret           |
-| `GOOGLE_PUBSUB_TOPIC`           | Gmail Pub/Sub topic name             |
-| `GOOGLE_PUBSUB_SUBSCRIPTION`    | Gmail Pub/Sub subscription name      |
-| `ANTHROPIC_API_KEY`              | Anthropic API key for Claude         |
+All keys live in `.env.example`. Summary:
+
+| Variable                 | Required for | Notes                                                       |
+|--------------------------|--------------|-------------------------------------------------------------|
+| `DATABASE_URL`           | Persisted    | Defaults to the Docker Compose Postgres                     |
+| `REDIS_URL`              | Worker       | Defaults to the Docker Compose Redis                        |
+| `NEXTAUTH_URL`           | Auth         | `http://localhost:3000` locally                             |
+| `NEXTAUTH_SECRET`        | Auth         | `openssl rand -base64 32`                                   |
+| `GOOGLE_CLIENT_ID/SECRET`| Auth + Gmail + Calendar | Google Cloud Console OAuth app                 |
+| `ANTHROPIC_API_KEY`      | Extraction   | `console.anthropic.com`                                     |
+| `ANTHROPIC_MODEL`        | —            | Default `claude-sonnet-4-6`                                 |
+| `GMAIL_PUBSUB_TOPIC`     | Push ingest  | Optional — falls back to polling                            |
+| `GMAIL_WEBHOOK_SECRET`   | Push ingest  | Shared secret Pub/Sub sends as `?token=…`                   |
+| `LUMI_USE_MOCK_FALLBACK` | Demo         | `true` (default) falls back to mocks when DB unreachable    |
+
+## API Surface
+
+| Route                            | Purpose                                   |
+|----------------------------------|-------------------------------------------|
+| `GET  /api/events`               | List events (optional `?status=PENDING`)  |
+| `GET/PATCH  /api/events/[id]`    | Single event; PATCH to change status      |
+| `GET  /api/events/[id]/ics`      | Download single event as .ics             |
+| `POST/DELETE  /api/events/[id]/sync` | Write/remove from Google Calendar     |
+| `GET  /api/calendar.ics`         | Subscribable iCal feed (all accepted)     |
+| `GET  /api/emails/[id]`          | Single email (source of an event)         |
+| `GET  /api/sync/status`          | Ingest health + DB connectivity           |
+| `POST /api/ingest/poll`          | Manual Gmail scan (authed user)           |
+| `POST /api/ingest/webhook`       | Gmail Pub/Sub push handler                |
 
 ## Project Structure
 
