@@ -6,6 +6,8 @@
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 
+![Lumi dashboard — extracted events from an NYU Wasserman newsletter](docs/demo.png)
+
 ---
 
 ## How It Works
