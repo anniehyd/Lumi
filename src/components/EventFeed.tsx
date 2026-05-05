@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Inbox, Sparkles, Loader2 } from "lucide-react";
 import { EventCard } from "@/components/EventCard";
@@ -62,10 +62,13 @@ export function EventFeed() {
     [events]
   );
 
-  function setStatus(id: string, status: EventStatus) {
-    mutation.mutate({ id, status });
-    setFocusIdx((i) => Math.min(i, pending.length - 2));
-  }
+  const setStatus = useCallback(
+    (id: string, status: EventStatus) => {
+      mutation.mutate({ id, status });
+      setFocusIdx((i) => Math.max(0, Math.min(i, pending.length - 2)));
+    },
+    [mutation, pending.length]
+  );
 
   // Keyboard shortcuts: j/k navigate, a/m/d act on focused card
   useEffect(() => {
@@ -101,7 +104,7 @@ export function EventFeed() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pending, focusIdx]);
+  }, [pending, focusIdx, setStatus]);
 
   return (
     <div className="flex flex-col gap-6 overflow-y-auto pr-1">

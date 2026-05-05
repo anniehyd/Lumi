@@ -11,8 +11,10 @@ import type { MockEvent, MockEmail } from "@/lib/mock/events";
 
 const useMockFallback = process.env.LUMI_USE_MOCK_FALLBACK !== "false";
 const demoUserEmail = "annie@livingbrands.ai";
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 
 async function getDemoUserId(): Promise<string | null> {
+  if (!hasDatabaseUrl) return null;
   try {
     const u = await prisma.user.findUnique({
       where: { email: demoUserEmail },
@@ -105,6 +107,7 @@ function filterMock(opts: { status?: MockEvent["status"]; limit?: number }): Moc
 
 export async function getEvent(id: string): Promise<MockEvent | null> {
   try {
+    if (!hasDatabaseUrl) throw new Error("database not configured");
     const row = await prisma.event.findUnique({ where: { id } });
     if (row) return dbEventToMock(row);
   } catch {
@@ -119,6 +122,7 @@ export async function updateEventStatus(
   status: MockEvent["status"]
 ): Promise<MockEvent | null> {
   try {
+    if (!hasDatabaseUrl) throw new Error("database not configured");
     const row = await prisma.event.update({
       where: { id },
       data: { status },
@@ -132,8 +136,54 @@ export async function updateEventStatus(
   }
 }
 
+export async function updateEvent(
+  id: string,
+  updates: {
+    status?: MockEvent["status"];
+    title?: string;
+    locationName?: string | null;
+    locationAddress?: string | null;
+    description?: string;
+  }
+): Promise<MockEvent | null> {
+  try {
+    if (!hasDatabaseUrl) throw new Error("database not configured");
+    const row = await prisma.event.update({
+      where: { id },
+      data: {
+        ...(updates.status ? { status: updates.status } : {}),
+        ...(updates.title ? { title: updates.title } : {}),
+        ...(updates.locationName !== undefined
+          ? { locationName: updates.locationName }
+          : {}),
+        ...(updates.locationAddress !== undefined
+          ? { locationAddress: updates.locationAddress }
+          : {}),
+        ...(updates.description !== undefined
+          ? { description: updates.description }
+          : {}),
+      },
+    });
+    return dbEventToMock(row);
+  } catch {
+    const found = mockEvents.find((e) => e.id === id);
+    if (!found) return null;
+    if (updates.status) found.status = updates.status;
+    if (updates.title) found.title = updates.title;
+    if (updates.locationName !== undefined) {
+      found.locationName = updates.locationName ?? undefined;
+    }
+    if (updates.locationAddress !== undefined) {
+      found.locationAddress = updates.locationAddress ?? undefined;
+    }
+    if (updates.description !== undefined) found.description = updates.description;
+    return found;
+  }
+}
+
 export async function getEmail(id: string): Promise<MockEmail | null> {
   try {
+    if (!hasDatabaseUrl) throw new Error("database not configured");
     const row = await prisma.email.findUnique({ where: { id } });
     if (row) {
       return {

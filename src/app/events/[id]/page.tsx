@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
-import { use, useMemo, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { use, useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Calendar,
@@ -52,9 +52,26 @@ async function patchStatus(id: string, status: EventStatus): Promise<void> {
   if (!res.ok) throw new Error("patch failed");
 }
 
+async function patchEvent(
+  id: string,
+  updates: Pick<MockEvent, "title" | "description"> & {
+    locationName: string;
+    locationAddress: string;
+  }
+): Promise<MockEvent> {
+  const res = await fetch(`/api/events/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error("save failed");
+  return (await res.json()).event as MockEvent;
+}
+
 export default function EventDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const qc = useQueryClient();
 
   const { data: event, isLoading, error } = useQuery({
     queryKey: ["event", id],
@@ -71,12 +88,35 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
     enabled: !!event?.sourceEmailId,
   });
 
-  const [edits, setEdits] = useState({ title: "", locationName: "", locationAddress: "" });
+  const [edits, setEdits] = useState({
+    title: "",
+    locationName: "",
+    locationAddress: "",
+    description: "",
+  });
 
   const mutation = useMutation({
     mutationFn: ({ status }: { status: EventStatus }) => patchStatus(id, status),
     onSuccess: () => setTimeout(() => router.push("/dashboard"), 400),
   });
+
+  const saveMutation = useMutation({
+    mutationFn: () => patchEvent(id, edits),
+    onSuccess: (updated) => {
+      qc.setQueryData(["event", id], updated);
+      qc.invalidateQueries({ queryKey: ["events"] });
+    },
+  });
+
+  useEffect(() => {
+    if (!event) return;
+    setEdits({
+      title: event.title,
+      locationName: event.locationName ?? "",
+      locationAddress: event.locationAddress ?? "",
+      description: event.description,
+    });
+  }, [event]);
 
   const conflicts = useMemo(() => {
     if (!event) return [];
@@ -102,18 +142,14 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
     );
   }
 
-  // Lazy-initialize edits from loaded event (only once).
-  if (edits.title === "" && event.title) {
-    setEdits({
-      title: event.title,
-      locationName: event.locationName ?? "",
-      locationAddress: event.locationAddress ?? "",
-    });
-  }
-
   const start = new Date(event.startTime);
   const end = event.endTime ? new Date(event.endTime) : null;
   const status = mutation.variables?.status ?? event.status;
+  const hasEdits =
+    edits.title !== event.title ||
+    edits.locationName !== (event.locationName ?? "") ||
+    edits.locationAddress !== (event.locationAddress ?? "") ||
+    edits.description !== event.description;
 
   function handleAction(next: EventStatus) {
     mutation.mutate({ status: next });
@@ -228,9 +264,11 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
               <div className="text-xs uppercase tracking-wider text-lumi-subtle mb-2">
                 Description
               </div>
-              <p className="text-sm text-lumi-muted leading-relaxed">
-                {event.description}
-              </p>
+              <textarea
+                value={edits.description}
+                onChange={(e) => setEdits({ ...edits, description: e.target.value })}
+                className="min-h-28 w-full resize-y rounded-lg border border-lumi-border bg-lumi-surface px-3 py-2 text-sm leading-relaxed text-lumi-muted focus:outline-none focus:border-lumi-accent"
+              />
             </div>
           </section>
 
@@ -288,6 +326,21 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
               )}
             </div>
             <div className="flex items-center gap-2">
+              {saveMutation.isSuccess && !hasEdits && (
+                <span className="text-xs text-lumi-green">Saved</span>
+              )}
+              <button
+                onClick={() => saveMutation.mutate()}
+                disabled={!hasEdits || saveMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+                Save edits
+              </button>
               <a
                 href={`/api/events/${event.id}/ics`}
                 className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text transition-colors"
