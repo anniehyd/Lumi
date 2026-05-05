@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEvent, updateEventStatus } from "@/lib/dataSource";
+import { getEvent, updateEvent } from "@/lib/dataSource";
 import type { MockEvent } from "@/lib/mock/events";
 
 export const dynamic = "force-dynamic";
@@ -29,14 +29,33 @@ export async function PATCH(
   const body = await req.json().catch(() => ({}));
   const status = body.status as MockEvent["status"] | undefined;
 
-  if (!status || !validStatuses.includes(status)) {
+  if (status && !validStatuses.includes(status)) {
     return NextResponse.json(
       { error: "status must be one of " + validStatuses.join(", ") },
       { status: 400 }
     );
   }
 
-  const event = await updateEventStatus(id, status);
+  const title =
+    typeof body.title === "string" && body.title.trim()
+      ? body.title.trim()
+      : undefined;
+  const locationName =
+    typeof body.locationName === "string" ? body.locationName.trim() || null : undefined;
+  const locationAddress =
+    typeof body.locationAddress === "string"
+      ? body.locationAddress.trim() || null
+      : undefined;
+  const description =
+    typeof body.description === "string" ? body.description.trim() : undefined;
+
+  const event = await updateEvent(id, {
+    status,
+    title,
+    locationName,
+    locationAddress,
+    description,
+  });
   if (!event) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ event });
 }

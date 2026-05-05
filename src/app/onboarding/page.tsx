@@ -191,7 +191,7 @@ function StepDone() {
       >
         <Check className="w-8 h-8 text-lumi-green" />
       </motion.div>
-      <h1 className="font-serif text-4xl text-lumi-text mb-3">You're set.</h1>
+      <h1 className="font-serif text-4xl text-lumi-text mb-3">You&apos;re set.</h1>
       <p className="text-sm text-lumi-muted">Opening your inbox…</p>
     </Shell>
   );
