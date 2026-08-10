@@ -3,11 +3,40 @@
  * Start with: npm run worker
  */
 import { Worker } from "bullmq";
-import { connection, type IngestJob, type ReminderJob } from "@/lib/queue";
+import { connection, ingestQueue, type IngestJob, type ReminderJob } from "@/lib/queue";
 import { ingestUser } from "@/lib/services/ingest";
 import { prisma } from "@/lib/db";
 
 console.log("[worker] starting…");
+
+// Periodically enqueue an inbox scan for every connected user, so ingestion
+// runs unattended (no UI click, no Pub/Sub push required).
+// Set INGEST_POLL_MINUTES=0 to disable.
+const POLL_MINUTES = Number(process.env.INGEST_POLL_MINUTES ?? "10");
+
+async function sweep() {
+  const users = await prisma.user.findMany({
+    where: { accounts: { some: { provider: "google" } } },
+    select: { id: true },
+  });
+  for (const u of users) {
+    await ingestQueue().add(
+      "poll",
+      { userId: u.id, query: "newer_than:1d", maxResults: 25 },
+      { removeOnComplete: 100, removeOnFail: 50 }
+    );
+  }
+  if (users.length) console.log(`[sweep] enqueued ingest for ${users.length} user(s)`);
+}
+
+if (POLL_MINUTES > 0) {
+  console.log(`[worker] sweeping inboxes every ${POLL_MINUTES}m`);
+  sweep().catch((err) => console.error("[sweep] failed:", err));
+  setInterval(
+    () => sweep().catch((err) => console.error("[sweep] failed:", err)),
+    POLL_MINUTES * 60 * 1000
+  );
+}
 
 const ingestWorker = new Worker<IngestJob>(
   "ingest",
