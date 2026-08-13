@@ -11,10 +11,10 @@ const prisma = new PrismaClient();
 
 async function main() {
   const user = await prisma.user.upsert({
-    where: { email: "annie@livingbrands.ai" },
+    where: { email: "yh5536@nyu.edu" },
     update: {},
     create: {
-      email: "annie@livingbrands.ai",
+      email: "yh5536@nyu.edu",
       name: "Annie Hang",
       timezone: "America/New_York",
     },

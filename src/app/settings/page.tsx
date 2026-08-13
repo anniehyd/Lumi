@@ -64,7 +64,7 @@ export default function SettingsPage() {
           >
             <div className="flex items-center gap-2 text-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-lumi-green" />
-              <span className="text-lumi-text">annie@livingbrands.ai</span>
+              <span className="text-lumi-text">yh5536@nyu.edu</span>
             </div>
           </Row>
           <Row
@@ -106,7 +106,7 @@ export default function SettingsPage() {
               onChange={(e) => setCalendarId(e.target.value)}
               className="text-xs bg-lumi-bg border border-lumi-border rounded-md px-2.5 py-1.5 focus:outline-none focus:border-lumi-accent"
             >
-              <option value="primary">Primary — annie@livingbrands.ai</option>
+              <option value="primary">Primary — yh5536@nyu.edu</option>
               <option value="personal">Personal</option>
               <option value="work">Work</option>
             </select>
@@ -219,7 +219,7 @@ export default function SettingsPage() {
 
 function AccountRow() {
   const { data: session } = useSession();
-  const email = session?.user?.email ?? "annie@livingbrands.ai";
+  const email = session?.user?.email ?? "yh5536@nyu.edu";
   const image = session?.user?.image;
   return (
     <div className="px-5 py-4 flex items-center justify-between">

@@ -10,7 +10,7 @@ import type { MockEvent, MockEmail } from "@/lib/mock/events";
  */
 
 const useMockFallback = process.env.LUMI_USE_MOCK_FALLBACK !== "false";
-const demoUserEmail = "annie@livingbrands.ai";
+const demoUserEmail = "yh5536@nyu.edu";
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 
 async function getDemoUserId(): Promise<string | null> {

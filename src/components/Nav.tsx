@@ -14,7 +14,7 @@ const links = [
 export function Nav() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const userEmail = session?.user?.email ?? "annie@livingbrands.ai";
+  const userEmail = session?.user?.email ?? "yh5536@nyu.edu";
   const userImage = session?.user?.image ?? null;
 
   return (
