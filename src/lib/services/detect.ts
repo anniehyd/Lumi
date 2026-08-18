@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
+import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
 import { parseIcs } from "@/lib/detection/ics";
 import { parseSchemaOrg } from "@/lib/detection/schema";
 import { classifyKeyword } from "@/lib/detection/keyword";
@@ -96,6 +97,15 @@ async function persistEvents(
       select: { title: true },
     });
     if (near.some((n) => titleSimilarity(n.title, e.title) >= 0.6)) continue;
+
+    // Calendar awareness: flag (never decide) when the event overlaps
+    // something already on the user's Google Calendar.
+    const eventEnd = e.endTime
+      ? new Date(e.endTime)
+      : new Date(start.getTime() + 60 * 60 * 1000);
+    const busy = await listCalendarWindow(userId, start, eventEnd);
+    const conflictTitle = busy ? findConflict(busy, start, eventEnd) : null;
+
     await prisma.event.create({
       data: {
         userId,
@@ -116,6 +126,8 @@ async function persistEvents(
         rsvpLink: e.rsvpLink ?? null,
         rsvpDeadline: e.rsvpDeadline ? new Date(e.rsvpDeadline) : null,
         attire: e.attire ?? null,
+        relevance: Math.min(5, Math.max(1, Math.round(e.relevance ?? 3))),
+        conflictTitle,
         dedupHash: dedup,
       },
     });

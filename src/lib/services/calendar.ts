@@ -2,6 +2,56 @@ import { google } from "googleapis";
 import { prisma } from "@/lib/db";
 import { getGoogleAccessToken } from "@/lib/auth";
 
+export type CalendarBusySlot = { title: string; start: Date; end: Date };
+
+/**
+ * List the user's Google Calendar events in [timeMin, timeMax).
+ * Returns null when the user has no Google connection (demo mode) or the
+ * call fails — callers treat that as "conflicts unknown", never as an error.
+ */
+export async function listCalendarWindow(
+  userId: string,
+  timeMin: Date,
+  timeMax: Date,
+  calendarId: string = "primary"
+): Promise<CalendarBusySlot[] | null> {
+  try {
+    const token = await getGoogleAccessToken(userId);
+    if (!token) return null;
+    const oauth2 = new google.auth.OAuth2();
+    oauth2.setCredentials({ access_token: token });
+    const cal = google.calendar({ version: "v3", auth: oauth2 });
+    const res = await cal.events.list({
+      calendarId,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+      maxResults: 2500,
+    });
+    return (res.data.items ?? [])
+      .filter((i) => i.status !== "cancelled" && (i.start?.dateTime || i.start?.date))
+      .map((i) => ({
+        title: i.summary ?? "(untitled)",
+        start: new Date(i.start!.dateTime ?? i.start!.date!),
+        end: new Date(i.end?.dateTime ?? i.end?.date ?? i.start!.dateTime ?? i.start!.date!),
+      }));
+  } catch (err) {
+    console.error("[calendar] listCalendarWindow failed:", err);
+    return null;
+  }
+}
+
+/** First busy slot overlapping [start, end), or null. Pure — no I/O. */
+export function findConflict(
+  busy: CalendarBusySlot[],
+  start: Date,
+  end: Date
+): string | null {
+  const hit = busy.find((b) => b.start < end && b.end > start);
+  return hit ? hit.title : null;
+}
+
 /**
  * Write an accepted Lumi event to the user's Google Calendar.
  * Records the calendarEventId back on the row and flags conflicts.

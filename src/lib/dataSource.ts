@@ -42,6 +42,8 @@ function dbEventToMock(e: {
   organizerCompany: string | null;
   rsvpLink: string | null;
   emailId: string | null;
+  relevance: number;
+  conflictTitle: string | null;
 }): MockEvent {
   const kind = inferKind(e.title, e.description ?? "");
   return {
@@ -61,6 +63,8 @@ function dbEventToMock(e: {
     organizerCompany: e.organizerCompany ?? undefined,
     rsvpLink: e.rsvpLink ?? undefined,
     sourceEmailId: e.emailId ?? "",
+    relevance: e.relevance,
+    conflictTitle: e.conflictTitle ?? undefined,
   };
 }
 

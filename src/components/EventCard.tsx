@@ -78,18 +78,21 @@ export function EventCard({ event, focused, onAction }: Props) {
           : "border-lumi-border hover:border-lumi-subtle"
       }`}
     >
-      {/* Kind stripe + confidence chip */}
+      {/* Kind stripe + relevance stars + confidence chip */}
       <div className="flex items-center justify-between px-5 pt-4">
         <div className={`flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider ${kind.tone}`}>
           <Sparkles className="w-3 h-3" />
           <span>{kind.label}</span>
         </div>
-        {isLowConfidence && (
-          <div className="flex items-center gap-1 text-[11px] text-lumi-muted">
-            <AlertCircle className="w-3 h-3" />
-            <span>{Math.round(event.confidence * 100)}% — verify</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {isLowConfidence && (
+            <div className="flex items-center gap-1 text-[11px] text-lumi-muted">
+              <AlertCircle className="w-3 h-3" />
+              <span>{Math.round(event.confidence * 100)}% — verify</span>
+            </div>
+          )}
+          <RelevanceStars value={event.relevance ?? 3} />
+        </div>
       </div>
 
       <div className="px-5 pt-2 pb-5">
@@ -102,6 +105,16 @@ export function EventCard({ event, focused, onAction }: Props) {
             {event.title}
           </h2>
         </Link>
+
+        {/* Calendar conflict — informational only; the decision stays with you */}
+        {event.conflictTitle && (
+          <div className="mt-2 flex items-center gap-1.5 rounded-md bg-lumi-rose/10 px-2.5 py-1.5 text-xs text-lumi-rose">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              Overlaps with <span className="font-medium">“{event.conflictTitle}”</span> on your calendar
+            </span>
+          </div>
+        )}
 
         {/* Meta lines */}
         <div className="mt-3 space-y-1.5 text-sm text-lumi-muted">
@@ -195,6 +208,23 @@ export function EventCard({ event, focused, onAction }: Props) {
         </div>
       </div>
     </motion.article>
+  );
+}
+
+function RelevanceStars({ value }: { value: number }) {
+  const v = Math.min(5, Math.max(1, Math.round(value)));
+  return (
+    <div
+      className="flex items-center gap-0.5 text-[13px] leading-none"
+      title={`Relevance: ${v}/5 for your interests`}
+      aria-label={`Relevance ${v} out of 5`}
+    >
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span key={i} className={i <= v ? "text-lumi-accent" : "text-lumi-subtle/50"}>
+          ★
+        </span>
+      ))}
+    </div>
   );
 }
 

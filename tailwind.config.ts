@@ -6,18 +6,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        "lumi-bg": "#0F0E0C",
-        "lumi-surface": "#1A1815",
-        "lumi-surface-hover": "#221F1B",
-        "lumi-border": "#2A2723",
-        "lumi-text": "#F4EFE6",
-        "lumi-muted": "#8F8A80",
-        "lumi-subtle": "#5E5A52",
-        "lumi-accent": "#E8A04E",
-        "lumi-accent-hover": "#F0B068",
-        "lumi-blue": "#6B9FD9",
-        "lumi-rose": "#D97777",
-        "lumi-green": "#7FB069",
+        // Light "warm paper" palette
+        "lumi-bg": "#FAF7F1",
+        "lumi-surface": "#FFFFFF",
+        "lumi-surface-hover": "#F4EFE6",
+        "lumi-border": "#E8E2D6",
+        "lumi-text": "#2B2620",
+        "lumi-muted": "#6E6659",
+        "lumi-subtle": "#A69D8D",
+        "lumi-accent": "#D9821F",
+        "lumi-accent-hover": "#C0721A",
+        "lumi-blue": "#3D74B3",
+        "lumi-rose": "#C05252",
+        "lumi-green": "#4E8A3C",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],

@@ -110,6 +110,10 @@ model Event {
   organizerEmail   String?
   organizerCompany String?
 
+  // Ranking + calendar awareness
+  relevance     Int     @default(3) // 1..5 — fit to the user's interests
+  conflictTitle String? // title of the overlapping Google Calendar event, if any
+
   // Extras
   attire    String?
   rsvpLink  String?

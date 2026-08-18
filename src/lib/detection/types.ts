@@ -15,4 +15,5 @@ export type ExtractedEvent = {
   attire?: string;
   confidence: number; // 0..1
   kind: MockEvent["kind"];
+  relevance?: number; // 1..5 — fit to the user's interests
 };

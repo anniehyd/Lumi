@@ -60,7 +60,13 @@ export function EventFeed() {
       events
         .filter((e) => e.status === "PENDING" || e.status === "MAYBE")
         .filter((e) => new Date(e.startTime).getTime() > Date.now())
-        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+        // Most relevant first (tech > networking > everything else); soonest
+        // first within the same star rating.
+        .sort(
+          (a, b) =>
+            (b.relevance ?? 3) - (a.relevance ?? 3) ||
+            a.startTime.localeCompare(b.startTime)
+        ),
     [events]
   );
 

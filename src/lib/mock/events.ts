@@ -23,6 +23,8 @@ export type MockEvent = {
   organizerCompany?: string;
   rsvpLink?: string;
   sourceEmailId: string;
+  relevance?: number; // 1..5 — fit to the user's interests
+  conflictTitle?: string; // overlapping Google Calendar event, if any
 };
 
 export type MockEmail = {

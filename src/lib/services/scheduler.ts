@@ -5,6 +5,7 @@
 import { Worker } from "bullmq";
 import { connection, ingestQueue, type IngestJob, type ReminderJob } from "@/lib/queue";
 import { ingestUser } from "@/lib/services/ingest";
+import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
 import { prisma } from "@/lib/db";
 
 console.log("[worker] starting…");
@@ -54,6 +55,29 @@ async function purge() {
     console.log(`[purge] removed ${events.count} event(s), ${emails.count} email(s) older than ${WINDOW_DAYS}d`);
 }
 
+// Re-check undecided upcoming events against the user's calendar so conflict
+// badges track calendar changes. One events.list call per user per sweep.
+async function refreshConflicts(userId: string) {
+  const now = new Date();
+  const pending = await prisma.event.findMany({
+    where: { userId, status: { in: ["PENDING", "MAYBE"] }, startTime: { gt: now } },
+    select: { id: true, startTime: true, endTime: true, conflictTitle: true },
+  });
+  if (!pending.length) return;
+  const maxEnd = new Date(
+    Math.max(...pending.map((p) => (p.endTime ?? new Date(p.startTime.getTime() + 3600_000)).getTime()))
+  );
+  const busy = await listCalendarWindow(userId, now, maxEnd);
+  if (!busy) return;
+  for (const p of pending) {
+    const end = p.endTime ?? new Date(p.startTime.getTime() + 3600_000);
+    const title = findConflict(busy, p.startTime, end);
+    if (title !== p.conflictTitle) {
+      await prisma.event.update({ where: { id: p.id }, data: { conflictTitle: title } });
+    }
+  }
+}
+
 async function sweep() {
   const users = await prisma.user.findMany({
     where: { accounts: { some: { provider: "google" } } },
@@ -64,6 +88,9 @@ async function sweep() {
       "poll",
       { userId: u.id, query: await queryFor(u.id), maxResults: 100 },
       { removeOnComplete: 100, removeOnFail: 50 }
+    );
+    await refreshConflicts(u.id).catch((err) =>
+      console.error("[sweep] conflict refresh failed:", err)
     );
   }
   if (users.length) console.log(`[sweep] enqueued ingest for ${users.length} user(s)`);

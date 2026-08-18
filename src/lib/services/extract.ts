@@ -65,8 +65,13 @@ const SAVE_EVENTS_TOOL = {
               type: "string" as const,
               enum: ["MEETING", "INFO_SESSION", "DEADLINE", "COFFEE_CHAT"],
             },
+            relevance: {
+              type: "integer" as const,
+              description:
+                "How relevant this event is to the user's interests, 1 (barely) to 5 (perfect fit). Follow the relevance rubric in the system prompt.",
+            },
           },
-          required: ["title", "startTime", "timezone", "confidence", "kind", "description"],
+          required: ["title", "startTime", "timezone", "confidence", "kind", "description", "relevance"],
         },
       },
     },
@@ -89,7 +94,23 @@ Rules:
 - If no events, return an empty array.
 - Always infer a timezone. Default to the sender's likely timezone (e.g. US universities → America/New_York).
 - Confidence: 1.0 = explicit date + location + RSVP; 0.8 = date + title; <0.7 = ambiguous.
-- Use the current year (2026) if the email omits it and the date would otherwise be in the past.`;
+- Use the current year (2026) if the email omits it and the date would otherwise be in the past.
+
+Relevance rubric — score each event 1..5 for THIS user:
+The user is an NYU undergrad (Math + CS) hunting for tech internships. Priorities,
+highest first: software engineering, CS, coding, product, cloud engineering, AI/ML,
+hackathons, tech company info sessions and internship/application deadlines.
+- 5: directly tech-career: tech/SWE/product/cloud/AI internships or deadlines,
+  hackathons, tech company recruiting or info sessions, CS career workshops.
+- 4: general career networking with a tech angle, tech talks, startup events,
+  quant/tech-adjacent recruiting.
+- 3: general networking and social mixers where one could meet people
+  (career fairs, bagel/coffee socials, student org mixers), academic events.
+- 2: non-tech career events (pure finance/consulting/law recruiting),
+  general campus activities.
+- 1: unrelated to career or community (tourism outings, admin deadlines).
+Networking and social events are never below 3 unless clearly unrelated to
+meeting people.`;
 
 export async function extractWithClaude(input: {
   subject: string;
@@ -147,6 +168,7 @@ ${input.bodyText}`;
     attire: e.attire,
     confidence: e.confidence ?? 0.7,
     kind: (e.kind ?? "MEETING") as ExtractedEvent["kind"],
+    relevance: Math.min(5, Math.max(1, Math.round(e.relevance ?? 3))),
   }));
 }
 
