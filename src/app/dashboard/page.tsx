@@ -32,10 +32,12 @@ export default function Dashboard() {
   const { data: events = [] } = useQuery({
     queryKey: ["events"],
     queryFn: fetchEvents,
+    refetchInterval: 60_000,
   });
   const { data: syncStatus } = useQuery({
     queryKey: ["sync-status"],
     queryFn: fetchSyncStatus,
+    refetchInterval: 60_000,
   });
 
   const acceptedCount = events.filter((e) => e.status === "ACCEPTED").length;

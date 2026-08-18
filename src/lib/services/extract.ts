@@ -78,7 +78,13 @@ const SYSTEM_PROMPT = `You extract event invitations from emails.
 
 Rules:
 - Extract EVERY event in the email — newsletters and digests often contain multiple.
-- A "deadline" (application due, RSVP by) is an event. Set kind=DEADLINE, use the deadline as startTime.
+- Only real event invitations count: things the recipient is invited to attend
+  (info sessions, talks, workshops, socials, career events, meetings).
+- An application or RSVP deadline is an event. Set kind=DEADLINE, use the deadline as startTime.
+- Surveys and feedback requests are NOT events — skip survey/feedback deadlines entirely.
+- Marketing or promotional emails from businesses (fitness studios, gyms, retail,
+  class schedules, member perks) are ads — extract NOTHING from them, even if
+  they list specific class or session times.
 - Job postings, general announcements without a time, and unsubscribe footers are NOT events.
 - If no events, return an empty array.
 - Always infer a timezone. Default to the sender's likely timezone (e.g. US universities → America/New_York).
@@ -114,8 +120,17 @@ ${input.bodyText}`;
   const toolUse = response.content.find((c) => c.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") return [];
 
-  const input_ = toolUse.input as { events?: Partial<ExtractedEvent>[] };
-  const events = input_.events ?? [];
+  // The model occasionally returns the events array JSON-encoded as a string.
+  let raw = (toolUse.input as { events?: unknown }).events ?? [];
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  const events = raw as Partial<ExtractedEvent>[];
 
   return events.filter(isValid).map((e) => ({
     title: e.title!,

@@ -30,7 +30,7 @@ async function clientFor(userId: string): Promise<gmail_v1.Gmail | null> {
 
 /**
  * List unread/recent messages. `query` follows Gmail search syntax.
- * Default looks at last 30 days of inbox mail, excluding obvious junk.
+ * Default looks at last 14 days of inbox mail, excluding obvious junk.
  */
 export async function listMessages(
   userId: string,
@@ -40,7 +40,7 @@ export async function listMessages(
   if (!gmail) return [];
   const res = await gmail.users.messages.list({
     userId: "me",
-    q: opts.query ?? "newer_than:30d -category:promotions -category:social",
+    q: opts.query ?? "newer_than:14d -category:promotions -category:social",
     maxResults: opts.maxResults ?? 50,
   });
   return (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);

@@ -30,6 +30,8 @@ export function EventFeed() {
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["events"],
     queryFn: fetchEvents,
+    // Keep the feed live: new mail lands and started events age out on their own.
+    refetchInterval: 60_000,
   });
   const [focusIdx, setFocusIdx] = useState(0);
 
@@ -50,15 +52,15 @@ export function EventFeed() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["events"] }),
   });
 
+  // Only undecided, still-upcoming events live in the feed: once you Attend
+  // or Decline, the card leaves the interface (accepted ones live on in the
+  // calendar), and events that have already started are no longer actionable.
   const pending = useMemo(
     () =>
       events
-        .filter((e) => e.status === "PENDING")
+        .filter((e) => e.status === "PENDING" || e.status === "MAYBE")
+        .filter((e) => new Date(e.startTime).getTime() > Date.now())
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-    [events]
-  );
-  const resolved = useMemo(
-    () => events.filter((e) => e.status !== "PENDING"),
     [events]
   );
 
@@ -142,19 +144,6 @@ export function EventFeed() {
         </div>
       )}
 
-      {/* Resolved */}
-      {resolved.length > 0 && (
-        <div className="mt-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-lumi-subtle mb-3">
-            Resolved
-          </h3>
-          <div className="flex flex-col gap-2">
-            {resolved.map((e) => (
-              <ResolvedRow key={e.id} event={e} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -186,25 +175,3 @@ function EmptyState() {
   );
 }
 
-function ResolvedRow({ event }: { event: MockEvent }) {
-  const statusLabel = {
-    ACCEPTED: { label: "Attending", color: "text-lumi-green" },
-    MAYBE: { label: "Maybe", color: "text-lumi-muted" },
-    DECLINED: { label: "Declined", color: "text-lumi-subtle line-through" },
-    PENDING: { label: "", color: "" },
-  }[event.status];
-  const start = new Date(event.startTime);
-  return (
-    <div className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-lumi-surface transition-colors">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className={`text-xs font-medium ${statusLabel.color} w-20 shrink-0`}>
-          {statusLabel.label}
-        </span>
-        <span className="text-sm text-lumi-text truncate">{event.title}</span>
-      </div>
-      <span className="text-xs text-lumi-subtle shrink-0 ml-4">
-        {start.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-      </span>
-    </div>
-  );
-}

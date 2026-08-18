@@ -14,6 +14,46 @@ console.log("[worker] starting…");
 // Set INGEST_POLL_MINUTES=0 to disable.
 const POLL_MINUTES = Number(process.env.INGEST_POLL_MINUTES ?? "10");
 
+const WINDOW_DAYS = 14;
+const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
+const JUNK_FILTER = "-category:promotions -category:social";
+
+// Incremental query: only list mail newer than what we've already ingested
+// (1h overlap; messageId dedup absorbs it). First run backfills the window.
+async function queryFor(userId: string): Promise<string> {
+  const latest = await prisma.email.findFirst({
+    where: { userId },
+    orderBy: { receivedAt: "desc" },
+    select: { receivedAt: true },
+  });
+  if (!latest) return `newer_than:${WINDOW_DAYS}d ${JUNK_FILTER}`;
+  const floor = Date.now() - WINDOW_MS;
+  const after = Math.max(latest.receivedAt.getTime() - 60 * 60 * 1000, floor);
+  return `after:${Math.floor(after / 1000)} ${JUNK_FILTER}`;
+}
+
+// Keep only the window: drop old emails, past events, and decided events
+// once they age out. Decided events vanish from the UI immediately; this
+// just stops the DB from growing.
+async function purge() {
+  const cutoff = new Date(Date.now() - WINDOW_MS);
+  const events = await prisma.event.deleteMany({
+    where: {
+      OR: [
+        { status: { in: ["ACCEPTED", "DECLINED"] }, updatedAt: { lt: cutoff } },
+        { startTime: { lt: cutoff } },
+        // An undecided event that has already started can no longer be attended.
+        { status: { in: ["PENDING", "MAYBE"] }, startTime: { lt: new Date() } },
+      ],
+    },
+  });
+  const emails = await prisma.email.deleteMany({
+    where: { receivedAt: { lt: cutoff } },
+  });
+  if (events.count || emails.count)
+    console.log(`[purge] removed ${events.count} event(s), ${emails.count} email(s) older than ${WINDOW_DAYS}d`);
+}
+
 async function sweep() {
   const users = await prisma.user.findMany({
     where: { accounts: { some: { provider: "google" } } },
@@ -22,11 +62,12 @@ async function sweep() {
   for (const u of users) {
     await ingestQueue().add(
       "poll",
-      { userId: u.id, query: "newer_than:1d", maxResults: 25 },
+      { userId: u.id, query: await queryFor(u.id), maxResults: 100 },
       { removeOnComplete: 100, removeOnFail: 50 }
     );
   }
   if (users.length) console.log(`[sweep] enqueued ingest for ${users.length} user(s)`);
+  await purge();
 }
 
 if (POLL_MINUTES > 0) {

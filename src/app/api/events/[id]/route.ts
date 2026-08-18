@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { getEvent, updateEvent } from "@/lib/dataSource";
+import { syncEventToCalendar, unsyncEvent } from "@/lib/services/calendar";
 import type { MockEvent } from "@/lib/mock/events";
 
 export const dynamic = "force-dynamic";
@@ -57,5 +60,29 @@ export async function PATCH(
     description,
   });
   if (!event) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json({ event });
+
+  // Deciding a card drives the calendar: Attend writes the event to Google
+  // Calendar, walking it back removes it. Calendar failures are isolated —
+  // the status change above always sticks.
+  let calendar: "synced" | "removed" | "skipped" | "failed" = "skipped";
+  if (status && status !== "PENDING") {
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user?.id) {
+        if (status === "ACCEPTED") {
+          calendar = (await syncEventToCalendar(session.user.id, id))
+            ? "synced"
+            : "failed";
+        } else {
+          await unsyncEvent(session.user.id, id);
+          calendar = "removed";
+        }
+      }
+    } catch (err) {
+      console.error("[calendar] auto-sync failed:", err);
+      calendar = "failed";
+    }
+  }
+
+  return NextResponse.json({ event, calendar });
 }

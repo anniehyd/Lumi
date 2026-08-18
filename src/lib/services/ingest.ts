@@ -40,20 +40,25 @@ export async function ingestUser(
     });
     newEmails++;
 
-    const n = await processEmail(userId, email.id, {
-      bodyText: parsed.bodyText,
-      bodyHtml: parsed.bodyHtml,
-      icsContent: parsed.icsContent,
-      subject: parsed.subject,
-      from: parsed.from,
-      receivedAt: parsed.receivedAt,
-    });
-    eventsCreated += n;
+    // One bad email must not kill the rest of the batch.
+    try {
+      const n = await processEmail(userId, email.id, {
+        bodyText: parsed.bodyText,
+        bodyHtml: parsed.bodyHtml,
+        icsContent: parsed.icsContent,
+        subject: parsed.subject,
+        from: parsed.from,
+        receivedAt: parsed.receivedAt,
+      });
+      eventsCreated += n;
 
-    await prisma.email.update({
-      where: { id: email.id },
-      data: { processed: true },
-    });
+      await prisma.email.update({
+        where: { id: email.id },
+        data: { processed: true },
+      });
+    } catch (err) {
+      console.error(`[ingest] processEmail failed for ${gmailId}:`, err);
+    }
   }
 
   return { fetched: ids.length, newEmails, eventsCreated };

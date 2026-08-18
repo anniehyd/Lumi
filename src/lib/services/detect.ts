@@ -77,6 +77,10 @@ async function persistEvents(
     if (existing) continue;
 
     const start = new Date(e.startTime);
+    // Only future events are actionable — skip past or unparseable dates.
+    if (!(start.getTime() > Date.now())) continue;
+    // Survey/feedback deadlines are noise even when a tier extracts them.
+    if (/survey|feedback/i.test(e.title)) continue;
     await prisma.event.create({
       data: {
         userId,
