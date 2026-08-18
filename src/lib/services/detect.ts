@@ -81,6 +81,21 @@ async function persistEvents(
     if (!(start.getTime() > Date.now())) continue;
     // Survey/feedback deadlines are noise even when a tier extracts them.
     if (/survey|feedback/i.test(e.title)) continue;
+
+    // Fuzzy cross-email dedup: the same event announced by two senders comes
+    // in with slightly different titles/organizers and beats the exact hash.
+    // Same user + start within an hour + high title overlap = same event.
+    const near = await prisma.event.findMany({
+      where: {
+        userId,
+        startTime: {
+          gte: new Date(start.getTime() - 60 * 60 * 1000),
+          lte: new Date(start.getTime() + 60 * 60 * 1000),
+        },
+      },
+      select: { title: true },
+    });
+    if (near.some((n) => titleSimilarity(n.title, e.title) >= 0.6)) continue;
     await prisma.event.create({
       data: {
         userId,
@@ -107,6 +122,26 @@ async function persistEvents(
     inserted++;
   }
   return inserted;
+}
+
+function titleTokens(t: string): Set<string> {
+  return new Set(
+    t
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2)
+  );
+}
+
+/** Overlap coefficient of title word sets: 1.0 = one title's words all appear in the other. */
+export function titleSimilarity(a: string, b: string): number {
+  const ta = titleTokens(a);
+  const tb = titleTokens(b);
+  if (!ta.size || !tb.size) return 0;
+  let overlap = 0;
+  for (const w of ta) if (tb.has(w)) overlap++;
+  return overlap / Math.min(ta.size, tb.size);
 }
 
 function dedupHash(e: ExtractedEvent): string {
