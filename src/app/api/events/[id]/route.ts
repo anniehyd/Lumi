@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAuthorizedViewer } from "@/lib/apiAuth";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getEvent, updateEvent } from "@/lib/dataSource";
@@ -18,6 +19,9 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!(await isAuthorizedViewer())) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
   const { id } = await params;
   const event = await getEvent(id);
   if (!event) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -28,6 +32,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!(await isAuthorizedViewer())) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const status = body.status as MockEvent["status"] | undefined;

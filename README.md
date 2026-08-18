@@ -1,6 +1,8 @@
 # 📬 Lumi
 
-**AI-powered email-to-calendar assistant.** Lumi scans your inbox, detects event invitations, extracts structured details, and adds them to your calendar with one click.
+**AI-powered email-to-calendar assistant.** Lumi scans your inbox, detects event invitations, extracts structured details, ranks them by how relevant they are to you, flags calendar conflicts, and adds the ones you accept to Google Calendar with one click.
+
+**Live demo:** <https://lumi-demo.fly.dev> (mock data — no sign-in needed)
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
@@ -13,14 +15,15 @@
 ## How It Works
 
 ```
-Email arrives → Detection → LLM Extraction → Event Card → User decides → Calendar sync
+Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict check → Ranked Event Card → User decides → Calendar sync
 ```
 
-1. **Ingestion** — Gmail API push notifications (or IMAP polling) deliver new emails
-2. **Detection** — Tiered classifier: ICS attachments → schema.org markup → keyword match → LLM fallback
-3. **Extraction** — Claude `tool_use` extracts structured event JSON (title, date, time, location, organizer, attire, RSVP)
-4. **Dashboard** — Clean card UI presents events with Attend / Maybe / Decline actions
-5. **Calendar** — Accepted events are written to Google Calendar with reminders and conflict detection
+1. **Ingestion** — a worker sweeps Gmail every 30 minutes, incrementally (only mail newer than what's already ingested, hard-capped to a rolling 14-day window)
+2. **Detection** — Tiered classifier: ICS attachments → schema.org markup → keyword match → LLM fallback. Marketing emails, survey deadlines, and past events are filtered out; the same event announced by two senders is fuzzy-deduped (start-time window + title overlap)
+3. **Extraction + Ranking** — Claude `tool_use` extracts structured event JSON and, in the same call, scores relevance 1–5★ against the user's interest profile (tech/SWE/product/cloud/AI/hackathons high, networking mid, unrelated low)
+4. **Calendar awareness** — each new event is checked against the user's Google Calendar; overlaps get an "Overlaps with X" badge (informational only — the decision stays with the user), refreshed every sweep
+5. **Dashboard** — light-themed card UI sorted by relevance stars, with Attend / Maybe / Decline actions (keyboard: `a`/`m`/`d`). Decided cards leave the interface; data older than 14 days is purged automatically
+6. **Calendar** — Attend writes the event to Google Calendar; walking a decision back removes it
 
 ## Architecture
 
@@ -64,9 +67,16 @@ Email arrives → Detection → LLM Extraction → Event Card → User decides �
 | Database      | PostgreSQL 16 + Prisma ORM                       |
 | Email         | Gmail API + Pub/Sub, IMAP fallback               |
 | Calendar      | Google Calendar API                              |
-| LLM           | Claude Sonnet via Anthropic API (`tool_use`)     |
+| LLM           | Claude Haiku 4.5 via Anthropic API (`tool_use`)  |
 | Auth          | NextAuth.js (Google OAuth)                       |
 | Validation    | Zod                                              |
+
+## Deployments
+
+| URL | What it is |
+|---|---|
+| <https://lumi-demo.fly.dev> | Public demo — full UI on mock data, open to anyone |
+| `lumi-live` (Fly.io) | Personal 24/7 instance — web + worker processes, Fly Postgres, Upstash Redis (`fly deploy -c fly.live.toml`). Data routes require Google sign-in |
 
 ## Getting Started
 
