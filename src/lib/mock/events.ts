@@ -115,6 +115,14 @@ Looking forward to celebrating with everyone.
 
 const wassermanUnionSquare = "726 Broadway, New York, NY 10003";
 
+// Demo dates are relative to "now" so the feed (future events only) never goes stale.
+function inDays(days: number, hour: number, minute = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
 export const mockEvents: MockEvent[] = [
   {
     id: "evt_marshall_wace",
@@ -125,8 +133,10 @@ export const mockEvents: MockEvent[] = [
     title: "Coffee Chats with Marshall Wace",
     description:
       "Coffee chat on technology careers at Marshall Wace, a global hedge fund. Meet developers and hear about the projects they work on.",
-    startTime: "2026-04-28T12:00:00-04:00",
-    endTime: "2026-04-28T14:00:00-04:00",
+    startTime: inDays(2, 12),
+    endTime: inDays(2, 14),
+    relevance: 5,
+    conflictTitle: "Linear Algebra Recitation",
     timezone: "America/New_York",
     locationName: "Interview Room 4 — Wasserman Union Square",
     locationAddress: wassermanUnionSquare,
@@ -143,8 +153,9 @@ export const mockEvents: MockEvent[] = [
     title: "An Intro to Careers in Big Law",
     description:
       "Information session for undergraduates of all class years on the path to a career in Big Law. Hosted by Weil, Gotshal & Manges LLP.",
-    startTime: "2026-04-28T17:00:00-04:00",
-    endTime: "2026-04-28T18:00:00-04:00",
+    startTime: inDays(3, 17),
+    endTime: inDays(3, 18),
+    relevance: 2,
     timezone: "America/New_York",
     locationName: "Presentation Room B — Wasserman Center",
     locationAddress: wassermanUnionSquare,
@@ -161,7 +172,8 @@ export const mockEvents: MockEvent[] = [
     title: "Changemaker Fellowship 2026 — Application Deadline",
     description:
       "Application deadline for the Changemaker Fellowship. Grants up to $5,000 for ~35 students in public service and social impact.",
-    startTime: "2026-04-24T23:59:00-04:00",
+    startTime: inDays(5, 23, 59),
+    relevance: 3,
     timezone: "America/New_York",
     organizerName: "NYU Changemaker Council",
     rsvpLink: "https://wasserman.nyu.edu/changemaker",
@@ -175,8 +187,9 @@ export const mockEvents: MockEvent[] = [
     kind: "MEETING",
     title: "Dinner at Quince",
     description: "Private room at Quince. Black tie. RSVP by Monday.",
-    startTime: "2026-05-07T19:30:00-07:00",
-    endTime: "2026-05-07T22:00:00-07:00",
+    startTime: inDays(8, 19, 30),
+    endTime: inDays(8, 22),
+    relevance: 1,
     timezone: "America/Los_Angeles",
     locationName: "Quince",
     locationAddress: "470 Pacific Ave, San Francisco, CA 94133",
@@ -191,8 +204,8 @@ export const mockEvents: MockEvent[] = [
     kind: "MEETING",
     title: "Weekly Eng Standup",
     description: "Recurring weekly team sync.",
-    startTime: "2026-04-20T10:00:00-04:00",
-    endTime: "2026-04-20T10:30:00-04:00",
+    startTime: inDays(1, 10),
+    endTime: inDays(1, 10, 30),
     timezone: "America/New_York",
     locationName: "Zoom",
     sourceEmailId: "email_standup_01",
