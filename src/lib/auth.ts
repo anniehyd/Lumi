@@ -11,7 +11,17 @@ const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
 ].join(" ");
 
+// Demo mode has no Google OAuth configured, so sign-in is impossible and the
+// secret only signs empty-session cookies — a static fallback keeps
+// /api/auth/session from 500ing. Real deployments (Google creds set) still
+// require a real NEXTAUTH_SECRET.
+const demoSecret =
+  !process.env.NEXTAUTH_SECRET && !process.env.GOOGLE_CLIENT_ID
+    ? "lumi-demo-mode-not-a-secret"
+    : process.env.NEXTAUTH_SECRET;
+
 export const authOptions: NextAuthOptions = {
+  secret: demoSecret,
   adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
