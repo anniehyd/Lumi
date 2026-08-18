@@ -18,7 +18,7 @@ async function fetchEvents(): Promise<MockEvent[]> {
 
 export default function CalendarPage() {
   const [view, setView] = useState<View>("month");
-  const [cursor, setCursor] = useState(() => new Date("2026-04-20"));
+  const [cursor, setCursor] = useState(() => new Date());
   const { data: allEvents = [] } = useQuery({
     queryKey: ["events"],
     queryFn: fetchEvents,
@@ -69,7 +69,7 @@ export default function CalendarPage() {
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setCursor(new Date("2026-04-20"))}
+                onClick={() => setCursor(new Date())}
                 className="text-xs text-lumi-muted hover:text-lumi-text px-2 py-1 rounded hover:bg-lumi-surface"
               >
                 Today
@@ -117,7 +117,7 @@ function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
     eventsByDay.set(key, arr);
   }
 
-  const today = new Date("2026-04-20");
+  const today = new Date();
   const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
 
   return (
@@ -199,7 +199,7 @@ function WeekGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
   const hours = Array.from({ length: 14 }, (_, i) => 8 + i); // 8 AM – 9 PM
   const HOUR_PX = 44;
 
-  const today = new Date("2026-04-20");
+  const today = new Date();
   const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
 
   return (
