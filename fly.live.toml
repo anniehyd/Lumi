@@ -14,7 +14,7 @@ primary_region = "ewr"
   NODE_ENV = "production"
   NEXTAUTH_URL = "https://lumi-live.fly.dev"
   LUMI_USE_MOCK_FALLBACK = "false"
-  INGEST_POLL_MINUTES = "10"
+  INGEST_POLL_MINUTES = "30"
 
 [http_service]
   processes = ["web"]
