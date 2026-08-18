@@ -2,6 +2,7 @@
  * BullMQ worker process. Runs ingestion and reminder jobs from Redis queues.
  * Start with: npm run worker
  */
+import { Sentry } from "@/lib/services/instrument";
 import { Worker } from "bullmq";
 import { connection, ingestQueue, type IngestJob, type ReminderJob } from "@/lib/queue";
 import { ingestUser } from "@/lib/services/ingest";
@@ -89,9 +90,10 @@ async function sweep() {
       { userId: u.id, query: await queryFor(u.id), maxResults: 100 },
       { removeOnComplete: 100, removeOnFail: 50 }
     );
-    await refreshConflicts(u.id).catch((err) =>
-      console.error("[sweep] conflict refresh failed:", err)
-    );
+    await refreshConflicts(u.id).catch((err) => {
+      console.error("[sweep] conflict refresh failed:", err);
+      Sentry.captureException(err);
+    });
   }
   if (users.length) console.log(`[sweep] enqueued ingest for ${users.length} user(s)`);
   await purge();
@@ -99,9 +101,9 @@ async function sweep() {
 
 if (POLL_MINUTES > 0) {
   console.log(`[worker] sweeping inboxes every ${POLL_MINUTES}m`);
-  sweep().catch((err) => console.error("[sweep] failed:", err));
+  sweep().catch((err) => { console.error("[sweep] failed:", err); Sentry.captureException(err); });
   setInterval(
-    () => sweep().catch((err) => console.error("[sweep] failed:", err)),
+    () => sweep().catch((err) => { console.error("[sweep] failed:", err); Sentry.captureException(err); }),
     POLL_MINUTES * 60 * 1000
   );
 }
@@ -143,9 +145,11 @@ const reminderWorker = new Worker<ReminderJob>(
 
 ingestWorker.on("failed", (job, err) => {
   console.error(`[ingest:failed] ${job?.id}:`, err.message);
+  Sentry.captureException(err);
 });
 reminderWorker.on("failed", (job, err) => {
   console.error(`[reminder:failed] ${job?.id}:`, err.message);
+  Sentry.captureException(err);
 });
 
 function shutdown() {
