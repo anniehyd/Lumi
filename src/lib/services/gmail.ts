@@ -7,6 +7,24 @@ import { getGoogleAccessToken } from "@/lib/auth";
  * Uses the account access token (refreshed on demand) from lib/auth.
  */
 
+/**
+ * Which mail Lumi is allowed to look at, in Gmail search syntax. Every path
+ * into the detection pipeline (scheduled sweep, manual scan, push webhook)
+ * appends this, so it is the one place that decides what the pipeline — and
+ * therefore any Claude call — ever sees.
+ *
+ * Default: the inbox only, minus Gmail's own ad-ish categories. `in:inbox`
+ * drops archived and sent mail; the category exclusions drop Promotions,
+ * Social, Updates, and Forums. Written as exclusions rather than
+ * `category:primary` so it still behaves when inbox tabs are turned off.
+ *
+ * Override with INGEST_GMAIL_FILTER to hand-curate, e.g. `label:Lumi` to read
+ * only what a Gmail filter of your own has labelled.
+ */
+export const MAIL_FILTER =
+  process.env.INGEST_GMAIL_FILTER?.trim() ||
+  "in:inbox -category:promotions -category:social -category:updates -category:forums";
+
 export type ParsedMessage = {
   messageId: string;
   threadId: string;
@@ -30,7 +48,7 @@ async function clientFor(userId: string): Promise<gmail_v1.Gmail | null> {
 
 /**
  * List unread/recent messages. `query` follows Gmail search syntax.
- * Default looks at last 14 days of inbox mail, excluding obvious junk.
+ * Default looks at the last 14 days of mail that passes MAIL_FILTER.
  */
 export async function listMessages(
   userId: string,
@@ -40,7 +58,7 @@ export async function listMessages(
   if (!gmail) return [];
   const res = await gmail.users.messages.list({
     userId: "me",
-    q: opts.query ?? "newer_than:14d -category:promotions -category:social",
+    q: opts.query ?? `newer_than:14d ${MAIL_FILTER}`,
     maxResults: opts.maxResults ?? 50,
   });
   return (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);

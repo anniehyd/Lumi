@@ -1,7 +1,7 @@
 # Deploying Lumi to AWS (single EC2 box)
 
 Stack: one t3.small running docker compose — Next.js app, BullMQ worker
-(scans Gmail every `INGEST_POLL_MINUTES`), Postgres, Redis, and Caddy
+(scans Gmail at the times in `INGEST_SWEEP_TIMES`), Postgres, Redis, and Caddy
 terminating HTTPS for a DuckDNS domain.
 
 ## One-time setup
@@ -47,7 +47,7 @@ AWS_PROFILE=annie ./deploy/provision.sh          # prints Elastic IP
 
 Re-run `sync.sh` any time to ship code changes. First visit the site, sign in
 with Google (grant Gmail + Calendar), and the worker takes over from there —
-it scans the inbox every 10 minutes even with your laptop off.
+it scans the inbox on schedule (1 PM and 7 PM by default) even with your laptop off.
 
 ## Ops
 

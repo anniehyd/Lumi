@@ -4,21 +4,66 @@
  */
 import { Sentry } from "@/lib/services/instrument";
 import { Worker } from "bullmq";
+import { format } from "date-fns";
+import { formatInTimeZone, fromZonedTime, toZonedTime } from "date-fns-tz";
 import { connection, ingestQueue, type IngestJob, type ReminderJob } from "@/lib/queue";
 import { ingestUser } from "@/lib/services/ingest";
+import { MAIL_FILTER } from "@/lib/services/gmail";
 import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 console.log("[worker] starting…");
 
-// Periodically enqueue an inbox scan for every connected user, so ingestion
-// runs unattended (no UI click, no Pub/Sub push required).
-// Set INGEST_POLL_MINUTES=0 to disable.
-const POLL_MINUTES = Number(process.env.INGEST_POLL_MINUTES ?? "10");
+// Enqueue an inbox scan for every connected user at fixed times of day, so
+// ingestion runs unattended (no UI click, no Pub/Sub push required).
+// Sweeping is deliberately tied to when someone actually opens Lumi — scanning
+// in between burns Gmail/Calendar quota and machine time for nobody.
+//   INGEST_SWEEP_TIMES  comma-separated HH:MM (24h) in INGEST_SWEEP_TZ; empty disables
+//   INGEST_SWEEP_TZ     IANA zone the times are read in
+//   INGEST_SWEEP_ON_START  also sweep once at boot (useful in dev; off by default
+//                          so restarts don't add unscheduled scans)
+const SWEEP_TZ = process.env.INGEST_SWEEP_TZ || "America/New_York";
+const SWEEP_TIMES = parseSweepTimes(process.env.INGEST_SWEEP_TIMES ?? "13:00,19:00");
+const SWEEP_ON_START = process.env.INGEST_SWEEP_ON_START === "true";
+
+function parseSweepTimes(raw: string): { h: number; m: number }[] {
+  const times: { h: number; m: number }[] = [];
+  for (const part of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(part);
+    const h = match ? Number(match[1]) : NaN;
+    const m = match ? Number(match[2]) : NaN;
+    if (!match || h > 23 || m > 59) {
+      console.error(`[worker] ignoring malformed INGEST_SWEEP_TIMES entry: "${part}" (want HH:MM)`);
+      continue;
+    }
+    times.push({ h, m });
+  }
+  return times.sort((a, b) => a.h - b.h || a.m - b.m);
+}
+
+const hhmm = (t: { h: number; m: number }) =>
+  `${String(t.h).padStart(2, "0")}:${String(t.m).padStart(2, "0")}`;
+
+// Earliest configured time strictly after `from`. Checking today and tomorrow
+// in the target zone covers the wrap-around; fromZonedTime does the DST math.
+function nextSweepAt(from: Date): Date {
+  const local = toZonedTime(from, SWEEP_TZ);
+  let best: Date | null = null;
+  for (const dayOffset of [0, 1]) {
+    const day = new Date(local.getFullYear(), local.getMonth(), local.getDate() + dayOffset);
+    const stamp = format(day, "yyyy-MM-dd");
+    for (const t of SWEEP_TIMES) {
+      const at = fromZonedTime(`${stamp} ${hhmm(t)}:00`, SWEEP_TZ);
+      if (at.getTime() > from.getTime() && (!best || at < best)) best = at;
+    }
+  }
+  // SWEEP_TIMES is non-empty here, so today ∪ tomorrow always yields a match.
+  return best!;
+}
 
 const WINDOW_DAYS = 14;
 const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
-const JUNK_FILTER = "-category:promotions -category:social";
 
 // Incremental query: only list mail newer than what we've already ingested
 // (1h overlap; messageId dedup absorbs it). First run backfills the window.
@@ -28,10 +73,10 @@ async function queryFor(userId: string): Promise<string> {
     orderBy: { receivedAt: "desc" },
     select: { receivedAt: true },
   });
-  if (!latest) return `newer_than:${WINDOW_DAYS}d ${JUNK_FILTER}`;
+  if (!latest) return `newer_than:${WINDOW_DAYS}d ${MAIL_FILTER}`;
   const floor = Date.now() - WINDOW_MS;
   const after = Math.max(latest.receivedAt.getTime() - 60 * 60 * 1000, floor);
-  return `after:${Math.floor(after / 1000)} ${JUNK_FILTER}`;
+  return `after:${Math.floor(after / 1000)} ${MAIL_FILTER}`;
 }
 
 // Keep only the window: drop old emails, past events, and decided events
@@ -87,7 +132,9 @@ async function sweep() {
   for (const u of users) {
     await ingestQueue().add(
       "poll",
-      { userId: u.id, query: await queryFor(u.id), maxResults: 100 },
+      // One list page per sweep, and the incremental floor advances past whatever
+      // isn't fetched — so the cap has to cover a full half-day of mail.
+      { userId: u.id, query: await queryFor(u.id), maxResults: 250 },
       { removeOnComplete: 100, removeOnFail: 50 }
     );
     await refreshConflicts(u.id).catch((err) => {
@@ -99,13 +146,71 @@ async function sweep() {
   await purge();
 }
 
-if (POLL_MINUTES > 0) {
-  console.log(`[worker] sweeping inboxes every ${POLL_MINUTES}m`);
-  sweep().catch((err) => { console.error("[sweep] failed:", err); Sentry.captureException(err); });
-  setInterval(
-    () => sweep().catch((err) => { console.error("[sweep] failed:", err); Sentry.captureException(err); }),
-    POLL_MINUTES * 60 * 1000
+// The pool sits idle between sweeps and Fly's proxy drops the idle TCP
+// connection to lumi-live-db.flycast; Postgres itself isn't reaping (no
+// idle_session_timeout). Prisma usually reconnects transparently, but when it
+// doesn't the whole sweep dies with P1001 and that run's mail is never scanned.
+// Force a round-trip first so a dead socket surfaces here, where we can retry.
+const DB_RETRY_CODES = new Set(["P1001", "P1002", "P1017"]);
+
+function isConnectionError(err: unknown): boolean {
+  // A server that's unreachable at connect time throws an init error whose
+  // errorCode is undefined in Prisma 6, so the class itself is the only signal.
+  if (err instanceof Prisma.PrismaClientInitializationError) return true;
+  // A pooled socket that died while idle surfaces on the next query as P1001.
+  if (err instanceof Prisma.PrismaClientKnownRequestError) return DB_RETRY_CODES.has(err.code);
+  if (err instanceof Prisma.PrismaClientUnknownRequestError)
+    return /can't reach database server|kind: closed/i.test(err.message);
+  return false;
+}
+
+// Only the probe is retried, never sweep() itself: a half-finished sweep has
+// already enqueued ingest jobs, and replaying it would double-fetch Gmail.
+async function waitForDb(): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return;
+    } catch (err) {
+      if (attempt >= 3 || !isConnectionError(err)) throw err;
+      const code = (err as { code?: string }).code ?? (err as Error).constructor.name;
+      // The failed probe drops the broken socket from the pool, so the next
+      // attempt checks out a fresh connection.
+      console.warn(`[sweep] database unreachable (${code}); retry ${attempt}/2`);
+      await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+    }
+  }
+}
+
+function runSweep() {
+  return waitForDb()
+    .then(sweep)
+    .catch((err) => {
+      console.error("[sweep] failed:", err);
+      Sentry.captureException(err);
+    });
+}
+
+// One timer per sweep, re-armed after each run, so the schedule stays pinned to
+// wall-clock times across DST shifts and long-running processes.
+function scheduleNextSweep() {
+  const at = nextSweepAt(new Date());
+  const delayMs = Math.max(at.getTime() - Date.now(), 0);
+  console.log(
+    `[worker] next inbox sweep ${formatInTimeZone(at, SWEEP_TZ, "yyyy-MM-dd HH:mm zzz")}` +
+      ` (in ${Math.round(delayMs / 60_000)}m)`
   );
+  setTimeout(() => {
+    runSweep().finally(scheduleNextSweep);
+  }, Math.max(delayMs, 1_000));
+}
+
+if (SWEEP_TIMES.length) {
+  console.log(`[worker] sweeping inboxes at ${SWEEP_TIMES.map(hhmm).join(", ")} ${SWEEP_TZ}`);
+  if (SWEEP_ON_START) runSweep();
+  scheduleNextSweep();
+} else {
+  console.log("[worker] scheduled sweeps disabled (INGEST_SWEEP_TIMES is empty)");
 }
 
 const ingestWorker = new Worker<IngestJob>(

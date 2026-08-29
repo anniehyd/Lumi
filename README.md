@@ -18,7 +18,7 @@
 Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict check → Ranked Event Card → User decides → Calendar sync
 ```
 
-1. **Ingestion** — a worker sweeps Gmail every 30 minutes, incrementally (only mail newer than what's already ingested, hard-capped to a rolling 14-day window)
+1. **Ingestion** — a worker sweeps Gmail twice a day (1 PM and 7 PM local, configurable via `INGEST_SWEEP_TIMES`), incrementally (only mail newer than what's already ingested, hard-capped to a rolling 14-day window). Every ingest path is bounded by `INGEST_GMAIL_FILTER` — inbox only, no Promotions/Social/Updates/Forums, no archived or sent mail
 2. **Detection** — Tiered classifier: ICS attachments → schema.org markup → keyword match → LLM fallback. Marketing emails, survey deadlines, and past events are filtered out; the same event announced by two senders is fuzzy-deduped (start-time window + title overlap)
 3. **Extraction + Ranking** — Claude `tool_use` extracts structured event JSON and, in the same call, scores relevance 1–5★ against the user's interest profile (tech/SWE/product/cloud/AI/hackathons high, networking mid, unrelated low)
 4. **Calendar awareness** — each new event is checked against the user's Google Calendar; overlaps get an "Overlaps with X" badge (informational only — the decision stays with the user), refreshed every sweep
@@ -153,7 +153,10 @@ All keys live in `.env.example`. Summary:
 | `GOOGLE_CLIENT_ID/SECRET`| Auth + Gmail + Calendar | Google Cloud Console OAuth app                 |
 | `ANTHROPIC_API_KEY`      | Extraction   | `console.anthropic.com`                                     |
 | `ANTHROPIC_MODEL`        | —            | Default `claude-sonnet-4-6`                                 |
-| `GMAIL_PUBSUB_TOPIC`     | Push ingest  | Optional — falls back to polling                            |
+| `GMAIL_PUBSUB_TOPIC`     | Push ingest  | Optional — falls back to scheduled sweeps                   |
+| `INGEST_GMAIL_FILTER`    | All ingest   | Gmail search terms bounding what Lumi may read; default is inbox-only, no Promotions/Social/Updates/Forums |
+| `INGEST_SWEEP_TIMES`     | Worker       | Local `HH:MM` sweep times, default `13:00,19:00`; empty disables |
+| `INGEST_SWEEP_TZ`        | Worker       | IANA zone for those times, default `America/New_York`       |
 | `GMAIL_WEBHOOK_SECRET`   | Push ingest  | Shared secret Pub/Sub sends as `?token=…`                   |
 | `LUMI_USE_MOCK_FALLBACK` | Demo         | `true` (default) falls back to mocks when DB unreachable    |
 

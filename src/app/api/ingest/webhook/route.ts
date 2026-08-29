@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { ingestUser } from "@/lib/services/ingest";
+import { MAIL_FILTER } from "@/lib/services/gmail";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,6 +36,9 @@ export async function POST(req: Request) {
 
   // For simplicity we re-poll recent mail; production could diff the history
   // delta and fetch only changed messages.
-  const result = await ingestUser(user.id, { query: "newer_than:1d", maxResults: 25 });
+  const result = await ingestUser(user.id, {
+    query: `newer_than:1d ${MAIL_FILTER}`,
+    maxResults: 25,
+  });
   return NextResponse.json({ ok: true, ...result });
 }
