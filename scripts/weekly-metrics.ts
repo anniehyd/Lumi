@@ -13,6 +13,7 @@ import { config as loadEnv } from "dotenv";
 loadEnv();
 
 import { prisma } from "@/lib/db";
+import { summarize, utcDay } from "@/lib/metrics";
 
 const DAYS = Number(process.env.DAYS ?? 7);
 const since = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
@@ -61,6 +62,31 @@ async function main() {
   if (decided === 0) {
     console.log("\n  ⚠ Nobody has accepted or declined anything yet — precision is");
     console.log("    unmeasurable. That is the first thing to fix, not the model.");
+  }
+
+  // The funnel comes from MetricDaily, which is never purged — so unlike the
+  // sections below it stays correct for windows longer than 14 days.
+  const funnel = summarize(
+    await prisma.metricDaily.findMany({
+      where: { day: { gte: utcDay(new Date(Date.now() - (DAYS - 1) * 86_400_000)) } },
+    }),
+    DAYS
+  );
+  console.log("\n▸ FUNNEL  (all users; definitions in docs/METRICS.md)");
+  if (!funnel.hasData) {
+    console.log("  (no funnel data recorded in this window — tracking starts with the first sweep on this build)");
+  } else {
+    const f = funnel.totals;
+    console.log(`  emails scanned         ${f.emailsScanned}`);
+    console.log(`  stopped before model   ${f.emailsSkipped}`);
+    console.log(`  sent to the model      ${f.emailsToModel}   (${pct(f.emailsToModel, f.emailsScanned)} of scanned)`);
+    console.log(`  events found           ${f.eventsFound}   → ${f.eventsCreated} cards after dedup`);
+    console.log(`  events accepted        ${funnel.netAccepted}   (${f.eventsAccepted} accepts − ${f.acceptsReverted} reverted)`);
+    console.log(`  model spend            $${f.llmUsd.toFixed(4)}   (${f.llmInputTokens} in / ${f.llmOutputTokens} out)`);
+    console.log(
+      `  est. time saved        ${funnel.minutesSavedPerWeek.toFixed(1)} min/week` +
+        `   (${funnel.assumptions.minutesPerManualEntry} min per manual entry, ${funnel.assumptions.secondsPerCardReview}s per card review — assumptions)`
+    );
   }
 
   console.log("\n▸ BY MODEL");

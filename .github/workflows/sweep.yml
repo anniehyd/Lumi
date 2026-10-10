@@ -1,0 +1,48 @@
+# Triggers Lumi's inbox sweep on a schedule, replacing the always-on worker.
+#
+# Inert until BOTH repository secrets exist:
+#   LUMI_URL      e.g. https://lumi-live.fly.dev
+#   CRON_SECRET   the same value as the app's CRON_SECRET env var
+# Without them the job exits successfully without calling anything.
+#
+# Scheduled workflows only run from the default branch, and GitHub pauses them
+# after 60 days without repository activity.
+name: Inbox sweep
+
+on:
+  schedule:
+    # 17:00 and 23:00 UTC = 1 PM and 7 PM New York during daylight time
+    # (noon and 6 PM in winter). GitHub cron has no time-zone support.
+    - cron: "0 17,23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: lumi-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Trigger sweep
+        env:
+          LUMI_URL: ${{ secrets.LUMI_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$LUMI_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "LUMI_URL / CRON_SECRET not set; nothing to do."
+            exit 0
+          fi
+          # The response streams a heartbeat while the sweep runs and ends
+          # with one JSON line. --retry covers the cold start of a stopped
+          # machine; the route joins a sweep already in flight, so a retry
+          # cannot double-ingest.
+          body=$(curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-delay 10 --retry-connrefused \
+            --max-time 900 \
+            -X POST "$LUMI_URL/api/cron/sweep" \
+            -H "authorization: Bearer $CRON_SECRET")
+          result=$(printf '%s\n' "$body" | grep -v '^$' | tail -n 1)
+          echo "$result"
+          printf '%s' "$result" | grep -q '"ok":true'

@@ -12,9 +12,10 @@ import {
   LogOut,
   Rss,
   Copy,
-  ExternalLink, Compass } from "lucide-react";
+  ExternalLink, Compass, BarChart3 } from "lucide-react";
 import { Nav } from "@/components/Nav";
 import { ProfileEditor } from "@/components/ProfileEditor";
+import { MetricsCard } from "@/components/MetricsCard";
 
 export default function SettingsPage() {
   const [llmFallback, setLlmFallback] = useState(true);
@@ -82,6 +83,10 @@ export default function SettingsPage() {
         {/* What Lumi ranks against. Set once during onboarding, changed here. */}
         <Section icon={<Compass className="w-4 h-4" />} title="What matters to you">
           <ProfileEditor />
+        </Section>
+
+        <Section icon={<BarChart3 className="w-4 h-4" />} title="Your numbers — last 7 days">
+          <MetricsCard />
         </Section>
 
         <Section icon={<Sparkles className="w-4 h-4" />} title="Detection">

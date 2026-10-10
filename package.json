@@ -16,6 +16,8 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx scripts/seed-test-emails.ts",
     "worker": "tsx src/lib/services/scheduler.ts",
+    "metrics": "tsx scripts/weekly-metrics.ts",
+    "eval:prefilter": "tsx scripts/eval-prefilter.ts",
     "test": "vitest",
     "test:run": "vitest run"
   },
