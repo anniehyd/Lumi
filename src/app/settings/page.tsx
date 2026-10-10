@@ -12,9 +12,9 @@ import {
   LogOut,
   Rss,
   Copy,
-  ExternalLink,
-} from "lucide-react";
+  ExternalLink, Compass } from "lucide-react";
 import { Nav } from "@/components/Nav";
+import { ProfileEditor } from "@/components/ProfileEditor";
 
 export default function SettingsPage() {
   const [llmFallback, setLlmFallback] = useState(true);
@@ -79,6 +79,11 @@ export default function SettingsPage() {
         </Section>
 
         {/* Detection */}
+        {/* What Lumi ranks against. Set once during onboarding, changed here. */}
+        <Section icon={<Compass className="w-4 h-4" />} title="What matters to you">
+          <ProfileEditor />
+        </Section>
+
         <Section icon={<Sparkles className="w-4 h-4" />} title="Detection">
           <Row
             label="LLM extraction fallback"

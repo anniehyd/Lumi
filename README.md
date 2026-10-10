@@ -18,6 +18,7 @@
 Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict check → Ranked Event Card → User decides → Calendar sync
 ```
 
+0. **Sources** — Gmail, plus the user's Handshake iCal export feed (Handshake has no student-facing API; see [docs/handshake.md](docs/handshake.md))
 1. **Ingestion** — a worker sweeps Gmail twice a day (1 PM and 7 PM local, configurable via `INGEST_SWEEP_TIMES`), incrementally (only mail newer than what's already ingested, hard-capped to a rolling 14-day window). Every ingest path is bounded by `INGEST_GMAIL_FILTER` — inbox only, no Promotions/Social/Updates/Forums, no archived or sent mail
 2. **Detection** — Tiered classifier: ICS attachments → schema.org markup → keyword match → LLM fallback. Marketing emails, survey deadlines, and past events are filtered out; the same event announced by two senders is fuzzy-deduped (start-time window + title overlap)
 3. **Extraction + Ranking** — Claude `tool_use` extracts structured event JSON and, in the same call, scores relevance 1–5★ against the user's interest profile (tech/SWE/product/cloud/AI/hackathons high, networking mid, unrelated low)
@@ -66,8 +67,9 @@ Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict 
 | Backend       | Next.js API routes, BullMQ (Redis)               |
 | Database      | PostgreSQL 16 + Prisma ORM                       |
 | Email         | Gmail API + Pub/Sub, IMAP fallback               |
+| Handshake     | Personal iCal export feed (no student API exists) |
 | Calendar      | Google Calendar API                              |
-| LLM           | Claude Haiku 4.5 via Anthropic API (`tool_use`)  |
+| LLM           | Claude or Qwen via forced tool use (`LLM_MODEL`) |
 | Auth          | NextAuth.js (Google OAuth)                       |
 | Validation    | Zod                                              |
 
@@ -152,12 +154,16 @@ All keys live in `.env.example`. Summary:
 | `NEXTAUTH_SECRET`        | Auth         | `openssl rand -base64 32`                                   |
 | `GOOGLE_CLIENT_ID/SECRET`| Auth + Gmail + Calendar | Google Cloud Console OAuth app                 |
 | `ANTHROPIC_API_KEY`      | Extraction   | `console.anthropic.com`                                     |
-| `ANTHROPIC_MODEL`        | —            | Default `claude-sonnet-4-6`                                 |
+| `LLM_MODEL`              | Extraction   | Default `claude-sonnet-4-6`. `claude*` → Anthropic, else Qwen |
+| `LLM_API_KEY`            | Extraction   | Qwen / OpenAI-compatible key (not needed for Claude)        |
+| `LLM_BASE_URL`           | —            | Default Alibaba Model Studio international endpoint          |
+| `CRON_SECRET`            | —            | Enables `POST /api/cron/sweep`; unset = route returns 503    |
 | `GMAIL_PUBSUB_TOPIC`     | Push ingest  | Optional — falls back to scheduled sweeps                   |
 | `INGEST_GMAIL_FILTER`    | All ingest   | Gmail search terms bounding what Lumi may read; default is inbox-only, no Promotions/Social/Updates/Forums |
 | `INGEST_SWEEP_TIMES`     | Worker       | Local `HH:MM` sweep times, default `13:00,19:00`; empty disables |
 | `INGEST_SWEEP_TZ`        | Worker       | IANA zone for those times, default `America/New_York`       |
 | `GMAIL_WEBHOOK_SECRET`   | Push ingest  | Shared secret Pub/Sub sends as `?token=…`                   |
+| `HANDSHAKE_ICS_URL`      | Handshake    | Personal iCal export link (Handshake → Settings → Calendar export). Single-user fallback; per-user setting lives in the DB. See [docs/handshake.md](docs/handshake.md) |
 | `LUMI_USE_MOCK_FALLBACK` | Demo         | `true` (default) falls back to mocks when DB unreachable    |
 
 ## API Surface
@@ -171,7 +177,8 @@ All keys live in `.env.example`. Summary:
 | `GET  /api/calendar.ics`         | Subscribable iCal feed (all accepted)     |
 | `GET  /api/emails/[id]`          | Single email (source of an event)         |
 | `GET  /api/sync/status`          | Ingest health + DB connectivity           |
-| `POST /api/ingest/poll`          | Manual Gmail scan (authed user)           |
+| `POST /api/ingest/poll`          | Manual Gmail + Handshake scan (authed user) |
+| `GET/PUT/DELETE /api/sources/handshake` | Connect/disconnect the Handshake feed |
 | `POST /api/ingest/webhook`       | Gmail Pub/Sub push handler                |
 
 ## Project Structure

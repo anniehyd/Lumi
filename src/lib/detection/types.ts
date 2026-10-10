@@ -15,5 +15,6 @@ export type ExtractedEvent = {
   attire?: string;
   confidence: number; // 0..1
   kind: MockEvent["kind"];
+  sourceUid?: string; // stable upstream id (ICS UID) when the source has one
   relevance?: number; // 1..5 — fit to the user's interests
 };

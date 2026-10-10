@@ -4,7 +4,8 @@ import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
 import { parseIcs } from "@/lib/detection/ics";
 import { parseSchemaOrg } from "@/lib/detection/schema";
 import { classifyKeyword } from "@/lib/detection/keyword";
-import { extractWithClaude } from "@/lib/services/extract";
+import { extractEvents, activeModel } from "@/lib/services/extract";
+import { normalizeProfile, PROMPT_VERSION } from "@/lib/profile";
 import type { ExtractedEvent } from "@/lib/detection/types";
 
 /**
@@ -14,7 +15,7 @@ import type { ExtractedEvent } from "@/lib/detection/types";
  *   1. ICS attachment       → parse directly (confidence 1.0)
  *   2. schema.org JSON-LD   → parse HTML (confidence 0.95)
  *   3. keyword classifier   → gate whether to spend LLM tokens
- *   4. Claude tool_use      → extract structured JSON (confidence <= 1.0)
+ *   4. LLM tool_use         → extract structured JSON (confidence <= 1.0)
  *
  * Returns the number of events persisted.
  */
@@ -50,26 +51,54 @@ export async function processEmail(
   const verdict = classifyKeyword(msg.subject, msg.bodyText);
   if (!verdict.hit) return 0;
 
-  // Tier 4 — Claude extraction
-  const events = await extractWithClaude({
+  // Tier 4 — LLM extraction, scored against this user's own interests.
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { profile: true },
+  });
+  const events = await extractEvents({
     subject: msg.subject,
     from: msg.from,
     bodyText: msg.bodyText,
     receivedAt: msg.receivedAt,
+    profile: normalizeProfile(row?.profile),
   });
   if (events.length === 0) return 0;
 
-  return persistEvents(userId, emailId, events, "LLM");
+  return persistEvents(userId, emailId, events, "LLM", "EMAIL", {
+    extractedBy: activeModel(),
+    promptVersion: PROMPT_VERSION,
+  });
 }
 
-async function persistEvents(
+/**
+ * Persist extracted events for a user, applying every guard the pipeline
+ * relies on: upstream-id dedup, title+date+organizer dedup, cross-source fuzzy
+ * dedup, past-event and survey filtering, and Google Calendar conflict
+ * flagging. Shared by the email pipeline and the Handshake feed so both get
+ * identical semantics.
+ */
+export async function persistEvents(
   userId: string,
-  emailId: string,
+  emailId: string | null,
   events: ExtractedEvent[],
-  via: "ICS" | "SCHEMA_ORG" | "KEYWORD" | "LLM"
+  via: "ICS" | "SCHEMA_ORG" | "KEYWORD" | "LLM",
+  source: "EMAIL" | "HANDSHAKE" = "EMAIL",
+  /** Only the LLM tier has a model to attribute; the parser tiers pass nothing. */
+  meta?: { extractedBy: string; promptVersion: string }
 ): Promise<number> {
   let inserted = 0;
   for (const e of events) {
+    // Tier 0 — stable upstream id. A feed re-fetched every sweep hands back
+    // the same UIDs, and those must never re-insert.
+    if (e.sourceUid) {
+      const seen = await prisma.event.findUnique({
+        where: { userId_sourceUid: { userId, sourceUid: e.sourceUid } },
+        select: { id: true },
+      });
+      if (seen) continue;
+    }
+
     const dedup = dedupHash(e);
     // Skip if we've seen this event (same title+date+organizer) for this user.
     const existing = await prisma.event.findFirst({
@@ -113,6 +142,10 @@ async function persistEvents(
         status: "PENDING",
         confidence: e.confidence,
         detectedVia: via,
+        source,
+        sourceUid: e.sourceUid ?? null,
+        extractedBy: meta?.extractedBy ?? null,
+        promptVersion: meta?.promptVersion ?? null,
         title: e.title,
         description: e.description,
         date: start.toISOString().slice(0, 10),

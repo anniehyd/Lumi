@@ -26,6 +26,7 @@ export function parseIcs(content: string): ExtractedEvent[] {
         rsvpLink: (comp.url as string) ?? undefined,
         confidence: 1.0,
         kind: "MEETING",
+        sourceUid: (comp.uid as string) || undefined,
       });
     }
     return events;

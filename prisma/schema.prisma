@@ -36,16 +36,37 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  timezone      String    @default("America/New_York")
-  accounts      Account[]
-  sessions      Session[]
-  emails        Email[]
-  events        Event[]
+  id               String    @id @default(cuid())
+  name             String?
+  email            String?   @unique
+  emailVerified    DateTime?
+  image            String?
+  timezone         String    @default("America/New_York")
+  // Personal Handshake iCal export URL (Settings → Calendar export → Copy
+  // calendar link). Null = Handshake ingestion off for this user.
+  handshakeFeedUrl String?
+  // Set when the one-time onboarding flow completes. Null = show onboarding.
+  onboardedAt      DateTime?
+  // What this user wants Lumi to surface. Shape: src/lib/profile.ts UserProfile.
+  // Null falls back to DEFAULT_PROFILE so extraction never breaks on a new user.
+  profile          Json?
+  accounts         Account[]
+  sessions         Session[]
+  emails           Email[]
+  events           Event[]
+  misses           Miss[]
+}
+
+/// A user telling us we failed to surface something. The only recall signal we
+/// have — accept/decline on Event only measures precision.
+model Miss {
+  id        String   @id @default(cuid())
+  userId    String
+  note      String   @db.Text
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model VerificationToken {
@@ -80,21 +101,25 @@ model Email {
 }
 
 model Event {
-  id          String      @id @default(cuid())
+  id          String          @id @default(cuid())
   userId      String
   emailId     String?
-  status      EventStatus @default(PENDING)
-  confidence  Float       @default(0)
+  status      EventStatus     @default(PENDING)
+  confidence  Float           @default(0)
   detectedVia DetectionMethod
+  source      EventSource     @default(EMAIL)
+  // Stable upstream id (ICS UID) for feed-sourced events, so re-fetching the
+  // same feed updates rather than duplicates. Null for email-derived events.
+  sourceUid   String?
 
   // Core fields
   title       String
-  description String?     @db.Text
-  date        String      // ISO date: 2026-03-28
-  startTime   DateTime    // Full ISO 8601 with offset
+  description String?   @db.Text
+  date        String // ISO date: 2026-03-28
+  startTime   DateTime // Full ISO 8601 with offset
   endTime     DateTime?
-  timezone    String      @default("America/New_York")
-  isAllDay    Boolean     @default(false)
+  timezone    String    @default("America/New_York")
+  isAllDay    Boolean   @default(false)
 
   // Location
   locationType    LocationType?
@@ -115,8 +140,8 @@ model Event {
   conflictTitle String? // title of the overlapping Google Calendar event, if any
 
   // Extras
-  attire    String?
-  rsvpLink  String?
+  attire       String?
+  rsvpLink     String?
   rsvpDeadline DateTime?
 
   // Recurrence
@@ -132,12 +157,18 @@ model Event {
   // Dedup
   dedupHash String? // hash(title + date + organizerEmail)
 
+  // Attribution — which model and prompt produced this row. Null for ICS,
+  // schema.org and keyword extraction, which involve no model.
+  extractedBy   String?
+  promptVersion String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   email Email? @relation(fields: [emailId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, sourceUid])
   @@index([userId, status])
   @@index([userId, date])
   @@index([dedupHash])
@@ -151,6 +182,11 @@ enum EventStatus {
   ARCHIVED
 }
 
+enum EventSource {
+  EMAIL
+  HANDSHAKE
+}
+
 enum DetectionMethod {
   ICS
   SCHEMA_ORG
@@ -162,4 +198,23 @@ enum LocationType {
   PHYSICAL
   VIRTUAL
   HYBRID
+}
+
+/// One row per extraction call. Without it, cost per accepted event — the
+/// metric that catches a cheaper model quietly getting worse — is not
+/// computable from the database. Purged with the retention window.
+model LlmUsage {
+  id            String   @id @default(cuid())
+  model         String
+  provider      String
+  promptVersion String?
+  inputTokens   Int
+  outputTokens  Int
+  events        Int
+  usd           Float?
+  ms            Int
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([model, createdAt])
 }

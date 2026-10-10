@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { listMessages, fetchMessage } from "@/lib/services/gmail";
-import { processEmail } from "@/lib/services/detect";
+import { processEmail, persistEvents } from "@/lib/services/detect";
+import { fetchHandshakeEvents, HandshakeFeedError } from "@/lib/services/handshake";
 
 /**
  * Ingest recent mail for a user.
@@ -62,4 +63,50 @@ export async function ingestUser(
   }
 
   return { fetched: ids.length, newEmails, eventsCreated };
+}
+
+/**
+ * Resolve the Handshake feed for a user: their stored URL, else the
+ * HANDSHAKE_ICS_URL env fallback (single-user deploys like lumi-live).
+ */
+async function handshakeFeedFor(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { handshakeFeedUrl: true },
+  });
+  return user?.handshakeFeedUrl || process.env.HANDSHAKE_ICS_URL?.trim() || null;
+}
+
+/**
+ * Ingest the user's Handshake calendar feed.
+ * No-op (not an error) when no feed is configured, so it can be called
+ * unconditionally from every sweep.
+ */
+export async function ingestHandshake(
+  userId: string
+): Promise<{ configured: boolean; fetched: number; eventsCreated: number }> {
+  const feedUrl = await handshakeFeedFor(userId);
+  if (!feedUrl) return { configured: false, fetched: 0, eventsCreated: 0 };
+
+  let events;
+  try {
+    events = await fetchHandshakeEvents(feedUrl);
+  } catch (err) {
+    // A bad or rotated feed must not take the Gmail sweep down with it.
+    if (err instanceof HandshakeFeedError) {
+      console.error(`[handshake] ${err.message}`);
+    } else {
+      console.error("[handshake] feed fetch failed:", err);
+    }
+    return { configured: true, fetched: 0, eventsCreated: 0 };
+  }
+
+  const eventsCreated = await persistEvents(
+    userId,
+    null,
+    events,
+    "ICS",
+    "HANDSHAKE"
+  );
+  return { configured: true, fetched: events.length, eventsCreated };
 }

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { EventFeed } from "@/components/EventFeed";
 import { MiniCalendar } from "@/components/MiniCalendar";
 import { Nav } from "@/components/Nav";
+import { MissReport } from "@/components/MissReport";
 import type { MockEvent } from "@/lib/mock/events";
 import { Activity, Database, MailCheck } from "lucide-react";
 
@@ -99,6 +100,12 @@ export default function Dashboard() {
                 <Shortcut label="Maybe" keys={["M"]} />
                 <Shortcut label="Decline" keys={["D"]} />
               </div>
+            </div>
+
+            {/* Recall signal — the only place a user can tell us about an
+                event we never surfaced at all. */}
+            <div className="pt-1">
+              <MissReport />
             </div>
           </aside>
         </div>

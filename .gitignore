@@ -34,3 +34,9 @@ next-env.d.ts
 # prisma
 prisma/*.db
 .vercel
+
+# eval fixtures — contain real email bodies, never commit
+eval/
+
+# eval fixtures — contain real email bodies, never commit
+fixtures/
