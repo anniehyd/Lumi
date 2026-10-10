@@ -1,5 +1,6 @@
 import { parseIcs } from "@/lib/detection/ics";
 import type { ExtractedEvent } from "@/lib/detection/types";
+import { withRetry } from "@/lib/retry";
 
 /**
  * Handshake source — reads the user's personal iCal export feed.
@@ -57,11 +58,20 @@ export function normalizeFeedUrl(raw: string): string {
 /** Fetch the raw ICS body for a feed URL. */
 export async function fetchFeed(feedUrl: string): Promise<string> {
   const url = normalizeFeedUrl(feedUrl);
-  const res = await fetch(url, {
-    headers: { Accept: "text/calendar, text/plain;q=0.9" },
-    redirect: "follow",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
+  const res = await withRetry(
+    async () => {
+      const r = await fetch(url, {
+        headers: { Accept: "text/calendar, text/plain;q=0.9" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (r.status === 429 || r.status >= 500) {
+        throw Object.assign(new Error(`Handshake feed returned ${r.status}`), { status: r.status });
+      }
+      return r;
+    },
+    { label: "handshake.feed" }
+  );
 
   if (!res.ok) {
     // A rotated or revoked calendar link 401/404s — worth saying plainly,

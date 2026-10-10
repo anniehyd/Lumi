@@ -1,6 +1,7 @@
 import { google, gmail_v1 } from "googleapis";
 import { simpleParser } from "mailparser";
 import { getGoogleAccessToken } from "@/lib/auth";
+import { withRetry } from "@/lib/retry";
 
 /**
  * Gmail service — list, fetch, and parse messages for a user.
@@ -36,6 +37,8 @@ export type ParsedMessage = {
   bodyHtml: string;
   hasIcs: boolean;
   icsContent?: string;
+  /** Carried a List-Unsubscribe header, i.e. it is list / marketing mail. */
+  listUnsubscribe: boolean;
 };
 
 async function clientFor(userId: string): Promise<gmail_v1.Gmail | null> {
@@ -56,11 +59,15 @@ export async function listMessages(
 ): Promise<string[]> {
   const gmail = await clientFor(userId);
   if (!gmail) return [];
-  const res = await gmail.users.messages.list({
-    userId: "me",
-    q: opts.query ?? `newer_than:14d ${MAIL_FILTER}`,
-    maxResults: opts.maxResults ?? 50,
-  });
+  const res = await withRetry(
+    () =>
+      gmail.users.messages.list({
+        userId: "me",
+        q: opts.query ?? `newer_than:14d ${MAIL_FILTER}`,
+        maxResults: opts.maxResults ?? 50,
+      }),
+    { label: "gmail.list" }
+  );
   return (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);
 }
 
@@ -71,11 +78,10 @@ export async function fetchMessage(
   const gmail = await clientFor(userId);
   if (!gmail) return null;
 
-  const res = await gmail.users.messages.get({
-    userId: "me",
-    id: gmailId,
-    format: "raw",
-  });
+  const res = await withRetry(
+    () => gmail.users.messages.get({ userId: "me", id: gmailId, format: "raw" }),
+    { label: "gmail.get" }
+  );
   const raw = res.data.raw;
   if (!raw) return null;
 
@@ -111,6 +117,7 @@ export async function fetchMessage(
     bodyHtml: typeof parsed.html === "string" ? parsed.html : "",
     hasIcs: !!icsContent,
     icsContent,
+    listUnsubscribe: parsed.headers.has("list-unsubscribe"),
   };
 }
 
@@ -124,13 +131,17 @@ export async function startWatch(userId: string): Promise<string | null> {
   const gmail = await clientFor(userId);
   if (!gmail) return null;
 
-  const res = await gmail.users.watch({
-    userId: "me",
-    requestBody: {
-      topicName: topic,
-      labelIds: ["INBOX"],
-      labelFilterAction: "include",
-    },
-  });
+  const res = await withRetry(
+    () =>
+      gmail.users.watch({
+        userId: "me",
+        requestBody: {
+          topicName: topic,
+          labelIds: ["INBOX"],
+          labelFilterAction: "include",
+        },
+      }),
+    { label: "gmail.watch" }
+  );
   return res.data.historyId ?? null;
 }

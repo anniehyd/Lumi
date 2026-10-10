@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
+import { withRetry } from "@/lib/retry";
 
 const GOOGLE_SCOPES = [
   "openid",
@@ -67,17 +68,40 @@ export async function getGoogleAccessToken(userId: string): Promise<string | nul
   if (!account.refresh_token) return account.access_token ?? null;
 
   // Refresh via Google OAuth token endpoint.
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      grant_type: "refresh_token",
-      refresh_token: account.refresh_token,
-    }),
-  });
-  if (!res.ok) return null;
+  // A 5xx or a dropped connection here used to read as "user not connected"
+  // and silently skip their whole sweep; only a real rejection (4xx — the
+  // grant was revoked or expired) should do that.
+  const refreshToken = account.refresh_token;
+  let res: Response;
+  try {
+    res = await withRetry(
+      async () => {
+        const r = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+            client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+            grant_type: "refresh_token",
+            refresh_token: refreshToken,
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (r.status === 429 || r.status >= 500) {
+          throw Object.assign(new Error(`token refresh failed (${r.status})`), { status: r.status });
+        }
+        return r;
+      },
+      { label: "google.token" }
+    );
+  } catch (err) {
+    console.error("[auth] Google token refresh unavailable:", err instanceof Error ? err.message : err);
+    return null;
+  }
+  if (!res.ok) {
+    console.error(`[auth] Google rejected the refresh token (${res.status}); user must sign in again`);
+    return null;
+  }
   const data = (await res.json()) as {
     access_token: string;
     expires_in: number;
