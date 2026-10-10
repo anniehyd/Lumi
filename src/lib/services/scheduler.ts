@@ -1,15 +1,21 @@
 /**
- * BullMQ worker process. Runs ingestion and reminder jobs from Redis queues.
+ * Worker process: fires the inbox sweep at fixed times of day.
  * Start with: npm run worker
+ *
+ * In the default inline mode that is all it does — the sweep ingests in this
+ * process and Redis is never touched. With INGEST_MODE=queue it also runs the
+ * BullMQ consumers that execute the jobs the sweep enqueues.
+ *
+ * A deployment that triggers POST /api/cron/sweep from an external scheduler
+ * does not need this process at all.
  */
 import { Sentry } from "@/lib/services/instrument";
-import { Worker } from "bullmq";
+import type { Worker } from "bullmq";
 import { format } from "date-fns";
 import { formatInTimeZone, fromZonedTime, toZonedTime } from "date-fns-tz";
-import { connection, type IngestJob, type ReminderJob } from "@/lib/queue";
-import { ingestUser, ingestHandshake } from "@/lib/services/ingest";
+import type { IngestJob, ReminderJob } from "@/lib/queue";
 import { prisma } from "@/lib/db";
-import { runSweep } from "@/lib/services/sweep";
+import { ingestMode, runIngestJob, runSweep } from "@/lib/services/sweep";
 
 console.log("[worker] starting…");
 
@@ -82,57 +88,70 @@ if (SWEEP_TIMES.length) {
   console.log("[worker] scheduled sweeps disabled (INGEST_SWEEP_TIMES is empty)");
 }
 
-const ingestWorker = new Worker<IngestJob>(
-  "ingest",
-  async (job) => {
-    console.log(`[ingest] user=${job.data.userId}`);
-    const result = await ingestUser(job.data.userId, {
-      query: job.data.query,
-      maxResults: job.data.maxResults,
-    });
-    // Handshake rides the same job so the two sources land in one transaction
-    // of work per sweep; its own failures are swallowed inside ingestHandshake.
-    const handshake = await ingestHandshake(job.data.userId);
-    if (handshake.configured) console.log(`[handshake] done`, handshake);
-    console.log(`[ingest] done`, result);
-    return { ...result, handshake };
-  },
-  { connection: connection(), concurrency: 2 }
-);
+const workers: Worker[] = [];
 
-const reminderWorker = new Worker<ReminderJob>(
-  "reminder",
-  async (job) => {
-    const event = await prisma.event.findFirst({
-      where: { id: job.data.eventId, userId: job.data.userId },
-    });
-    if (!event || event.status !== "MAYBE") {
-      console.log(`[reminder] skipped — event resolved or missing: ${job.data.eventId}`);
-      return { skipped: true };
-    }
-    // Surface as a PENDING nudge by bumping updatedAt; UI can highlight fresh ones.
-    await prisma.event.update({
-      where: { id: event.id },
-      data: { updatedAt: new Date() },
-    });
-    console.log(`[reminder] poked event: ${event.title}`);
-    return { poked: true };
-  },
-  { connection: connection(), concurrency: 4 }
-);
+async function startQueueConsumers() {
+  const { Worker } = await import("bullmq");
+  const { connection } = await import("@/lib/queue");
 
-ingestWorker.on("failed", (job, err) => {
-  console.error(`[ingest:failed] ${job?.id}:`, err.message);
-  Sentry.captureException(err);
-});
-reminderWorker.on("failed", (job, err) => {
-  console.error(`[reminder:failed] ${job?.id}:`, err.message);
-  Sentry.captureException(err);
-});
+  const ingestWorker = new Worker<IngestJob>(
+    "ingest",
+    async (job) => {
+      console.log(`[ingest] user=${job.data.userId}`);
+      const result = await runIngestJob(job.data);
+      console.log(`[ingest] done`, result);
+      return result;
+    },
+    { connection: connection(), concurrency: 2 }
+  );
+
+  const reminderWorker = new Worker<ReminderJob>(
+    "reminder",
+    async (job) => {
+      const event = await prisma.event.findFirst({
+        where: { id: job.data.eventId, userId: job.data.userId },
+      });
+      if (!event || event.status !== "MAYBE") {
+        console.log(`[reminder] skipped — event resolved or missing: ${job.data.eventId}`);
+        return { skipped: true };
+      }
+      // Surface as a PENDING nudge by bumping updatedAt; UI can highlight fresh ones.
+      await prisma.event.update({
+        where: { id: event.id },
+        data: { updatedAt: new Date() },
+      });
+      console.log(`[reminder] poked event: ${event.title}`);
+      return { poked: true };
+    },
+    { connection: connection(), concurrency: 4 }
+  );
+
+  ingestWorker.on("failed", (job, err) => {
+    console.error(`[ingest:failed] ${job?.id}:`, err.message);
+    Sentry.captureException(err);
+  });
+  reminderWorker.on("failed", (job, err) => {
+    console.error(`[reminder:failed] ${job?.id}:`, err.message);
+    Sentry.captureException(err);
+  });
+
+  workers.push(ingestWorker, reminderWorker);
+}
+
+if (ingestMode() === "queue") {
+  console.log("[worker] INGEST_MODE=queue — starting BullMQ consumers");
+  startQueueConsumers().catch((err) => {
+    console.error("[worker] could not start queue consumers:", err);
+    Sentry.captureException(err);
+    process.exit(1);
+  });
+} else {
+  console.log("[worker] inline mode — sweeps ingest in this process, Redis not used");
+}
 
 function shutdown() {
   console.log("[worker] shutting down…");
-  Promise.all([ingestWorker.close(), reminderWorker.close()]).then(() => process.exit(0));
+  Promise.all(workers.map((w) => w.close())).then(() => process.exit(0));
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
