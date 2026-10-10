@@ -191,16 +191,16 @@ async function callAnthropic(model: string, system: string, userContent: string)
     console.warn(`[extract] ${model} hit max_tokens (${MAX_TOKENS}); events from this email may be missing`);
   }
 
-  const toolUse = response.content.find((c) => c.type === "tool_use");
-  if (!toolUse || toolUse.type !== "tool_use") return null;
-
-  return {
-    payload: (toolUse.input as { events?: unknown }).events ?? [],
-    usage: {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    },
+  const usage: Usage = {
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
   };
+  // No tool call means no events — but the call was made and billed, so it
+  // is still reported with its usage rather than as "not called".
+  const toolUse = response.content.find((c) => c.type === "tool_use");
+  if (!toolUse || toolUse.type !== "tool_use") return { payload: [], usage };
+
+  return { payload: (toolUse.input as { events?: unknown })?.events ?? [], usage };
 }
 
 /**
