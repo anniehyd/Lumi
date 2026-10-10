@@ -2,7 +2,10 @@
 
 **AI-powered email-to-calendar assistant.** Lumi scans your inbox, detects event invitations, extracts structured details, ranks them by how relevant they are to you, flags calendar conflicts, and adds the ones you accept to Google Calendar with one click.
 
-**Live demo:** <https://lumi-demo.fly.dev> (mock data — no sign-in needed)
+**Status:** the hosted demo and live instance were shut down on 2026-10-02 for
+cost. Demo mode still runs locally with no credentials (`npm install && npm run dev`).
+
+**Docs:** [architecture](docs/ARCHITECTURE.md) · [cost](docs/COST.md) · [metrics](docs/METRICS.md) · [Handshake source](docs/handshake.md)
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
@@ -20,7 +23,7 @@ Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict 
 
 0. **Sources** — Gmail, plus the user's Handshake iCal export feed (Handshake has no student-facing API; see [docs/handshake.md](docs/handshake.md))
 1. **Ingestion** — a worker sweeps Gmail twice a day (1 PM and 7 PM local, configurable via `INGEST_SWEEP_TIMES`), incrementally (only mail newer than what's already ingested, hard-capped to a rolling 14-day window). Every ingest path is bounded by `INGEST_GMAIL_FILTER` — inbox only, no Promotions/Social/Updates/Forums, no archived or sent mail
-2. **Detection** — Tiered classifier: ICS attachments → schema.org markup → keyword match → LLM fallback. Marketing emails, survey deadlines, and past events are filtered out; the same event announced by two senders is fuzzy-deduped (start-time window + title overlap)
+2. **Detection** — Tiered classifier: ICS attachments → schema.org markup → keyword gate + rule-based pre-filter → LLM. The pre-filter skips surveys, mail with no date or time, duplicate content, replies that add nothing, and bulk senders with no track record, before any model call. Past events are dropped; the same event announced by two senders is fuzzy-deduped (start-time window + title overlap)
 3. **Extraction + Ranking** — Claude `tool_use` extracts structured event JSON and, in the same call, scores relevance 1–5★ against the user's interest profile (tech/SWE/product/cloud/AI/hackathons high, networking mid, unrelated low)
 4. **Calendar awareness** — each new event is checked against the user's Google Calendar; overlaps get an "Overlaps with X" badge (informational only — the decision stays with the user), refreshed every sweep
 5. **Dashboard** — light-themed card UI sorted by relevance stars, with Attend / Maybe / Decline actions (keyboard: `a`/`m`/`d`). Decided cards leave the interface; data older than 14 days is purged automatically
@@ -28,45 +31,17 @@ Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict 
 
 ## Architecture
 
-```
-┌─────────────┐   webhook/poll   ┌──────────────┐
-│  Gmail API   │────────────────▸│  Ingestion   │
-│  IMAP Server │                  │  Worker      │
-└─────────────┘                  └──────┬───────┘
-                                        │ enqueue
-                                        ▼
-                                 ┌──────────────┐
-                                 │  Detection   │──▸ ICS? → parse directly
-                                 │  Classifier  │──▸ HTML schema? → parse
-                                 └──────┬───────┘──▸ ambiguous? → LLM
-                                        │
-                                        ▼
-                                 ┌──────────────┐
-                                 │  LLM Extract │  Claude tool_use
-                                 │  (if needed) │  structured JSON out
-                                 └──────┬───────┘
-                                        │
-                                        ▼
-                                 ┌──────────────┐  ┌─────────────┐
-                                 │  Event Store │─▸│  Dashboard  │
-                                 │  (Postgres)  │  │  (Next.js)  │
-                                 └──────┬───────┘  └──────┬──────┘
-                                        │                 │ user action
-                                        ▼                 ▼
-                                 ┌──────────────┐  ┌─────────────┐
-                                 │  Scheduler   │  │  Calendar   │
-                                 │  (reminders) │  │  API Write  │
-                                 └──────────────┘  └─────────────┘
-```
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the pipeline diagram, the
+stage-by-stage file map, the data model and failure handling.
 
 ## Tech Stack
 
 | Layer         | Technology                                       |
 |---------------|--------------------------------------------------|
 | Frontend      | Next.js 15, React 19, Tailwind CSS, Framer Motion |
-| Backend       | Next.js API routes, BullMQ (Redis)               |
+| Backend       | Next.js API routes; sweeps run inline (BullMQ + Redis optional via `INGEST_MODE=queue`) |
 | Database      | PostgreSQL 16 + Prisma ORM                       |
-| Email         | Gmail API + Pub/Sub, IMAP fallback               |
+| Email         | Gmail API, polled on a schedule (read-only scope) |
 | Handshake     | Personal iCal export feed (no student API exists) |
 | Calendar      | Google Calendar API                              |
 | LLM           | Claude or Qwen via forced tool use (`LLM_MODEL`) |
@@ -75,10 +50,9 @@ Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict 
 
 ## Deployments
 
-| URL | What it is |
-|---|---|
-| <https://lumi-demo.fly.dev> | Public demo — full UI on mock data, open to anyone |
-| `lumi-live` (Fly.io) | Personal 24/7 instance — web + worker processes, Fly Postgres, Upstash Redis (`fly deploy -c fly.live.toml`). Data routes require Google sign-in |
+Nothing is deployed at the moment. `fly.toml` is the credential-free demo;
+`fly.live.toml` is a web-only live instance whose sweeps are triggered by
+`.github/workflows/sweep.yml`. Costs and options: [docs/COST.md](docs/COST.md).
 
 ## Getting Started
 
@@ -119,7 +93,7 @@ For demo mode, no edits needed. For persisted/live, fill in the relevant keys
 ### 3. Start infra (persisted + live modes)
 
 ```bash
-docker compose up -d        # Postgres on 5432, Redis on 6379
+docker compose up -d        # Postgres on 5432 (and Redis on 6379, only needed for INGEST_MODE=queue)
 npx prisma migrate dev --name init
 npm run db:seed             # loads the NYU Wasserman newsletter demo
 ```
@@ -134,13 +108,22 @@ Open [http://localhost:3000](http://localhost:3000). In demo mode the inbox
 populates immediately from mock data; in live mode it populates after the first
 Gmail scan.
 
-### 5. Start the worker (live mode)
+### 5. Run sweeps (live mode)
 
 ```bash
 npm run worker
 ```
 
-Handles ingestion jobs and Maybe-reminders from the BullMQ queues.
+Sweeps every connected inbox at the times in `INGEST_SWEEP_TIMES`. In the
+default inline mode this is a timer and needs no Redis. Alternatively skip the
+worker and call `POST /api/cron/sweep` from any scheduler.
+
+### Tests
+
+```bash
+npm run test:run        # 200+ tests, all on mocks and fixtures — no network
+npm run eval:prefilter  # replay eval/golden through the pre-filter (needs your own snapshot)
+```
 
 ## Environment Variables
 
@@ -149,12 +132,15 @@ All keys live in `.env.example`. Summary:
 | Variable                 | Required for | Notes                                                       |
 |--------------------------|--------------|-------------------------------------------------------------|
 | `DATABASE_URL`           | Persisted    | Defaults to the Docker Compose Postgres                     |
-| `REDIS_URL`              | Worker       | Defaults to the Docker Compose Redis                        |
+| `INGEST_MODE`            | —            | `inline` (default, no Redis) or `queue` (BullMQ)            |
+| `REDIS_URL`              | Queue mode   | Only read when `INGEST_MODE=queue`                          |
 | `NEXTAUTH_URL`           | Auth         | `http://localhost:3000` locally                             |
 | `NEXTAUTH_SECRET`        | Auth         | `openssl rand -base64 32`                                   |
 | `GOOGLE_CLIENT_ID/SECRET`| Auth + Gmail + Calendar | Google Cloud Console OAuth app                 |
 | `ANTHROPIC_API_KEY`      | Extraction   | `console.anthropic.com`                                     |
-| `LLM_MODEL`              | Extraction   | Default `claude-sonnet-4-6`. `claude*` → Anthropic, else Qwen |
+| `LLM_MODEL`              | Extraction   | Default `claude-haiku-4-5`. `claude*` → Anthropic, else Qwen |
+| `LLM_COMPACT_LINKS`      | Extraction   | `true` (default) replaces URLs with placeholders before the model call |
+| `PREFILTER_SENDER_HISTORY` | Detection  | `true` (default) mutes bulk senders that never produce events |
 | `LLM_API_KEY`            | Extraction   | Qwen / OpenAI-compatible key (not needed for Claude)        |
 | `LLM_BASE_URL`           | —            | Default Alibaba Model Studio international endpoint          |
 | `CRON_SECRET`            | —            | Enables `POST /api/cron/sweep`; unset = route returns 503    |
@@ -177,6 +163,8 @@ All keys live in `.env.example`. Summary:
 | `GET  /api/calendar.ics`         | Subscribable iCal feed (all accepted)     |
 | `GET  /api/emails/[id]`          | Single email (source of an event)         |
 | `GET  /api/sync/status`          | Ingest health + DB connectivity           |
+| `GET  /api/metrics`              | Signed-in user's funnel (`?days=7`)       |
+| `POST /api/cron/sweep`           | Run a sweep (bearer `CRON_SECRET`)        |
 | `POST /api/ingest/poll`          | Manual Gmail + Handshake scan (authed user) |
 | `GET/PUT/DELETE /api/sources/handshake` | Connect/disconnect the Handshake feed |
 | `POST /api/ingest/webhook`       | Gmail Pub/Sub push handler                |
@@ -184,56 +172,16 @@ All keys live in `.env.example`. Summary:
 ## Project Structure
 
 ```
-lumi/
-├── prisma/
-│   └── schema.prisma          # Database schema
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── events/        # Event CRUD endpoints
-│   │   │   ├── webhooks/gmail/ # Gmail push notification receiver
-│   │   │   └── cron/reminders/ # Maybe-event reminder scheduler
-│   │   ├── dashboard/         # Main dashboard page
-│   │   ├── layout.tsx         # Root layout with auth provider
-│   │   └── page.tsx           # Landing / auth gate
-│   ├── components/
-│   │   ├── EventCard.tsx      # Interactive event card
-│   │   ├── EventFeed.tsx      # Scrollable event list
-│   │   ├── DetailPanel.tsx    # Expanded event detail
-│   │   └── MiniCalendar.tsx   # Sidebar calendar widget
-│   └── lib/
-│       ├── services/
-│       │   ├── email.ts       # Gmail API + IMAP ingestion
-│       │   ├── detector.ts    # Event detection pipeline
-│       │   ├── extractor.ts   # Claude LLM extraction
-│       │   ├── calendar.ts    # Google Calendar write
-│       │   └── scheduler.ts   # BullMQ reminder jobs
-│       ├── schemas/
-│       │   └── event.ts       # Zod schemas + types
-│       └── utils/
-│           ├── ics-parser.ts  # ICS/iCal parsing
-│           └── dedup.ts       # Email deduplication
-├── scripts/
-│   └── seed-test-emails.ts    # Dev seed script
-├── .env.example
-├── .github/workflows/ci.yml
-├── next.config.ts
-├── tailwind.config.ts
-├── tsconfig.json
-├── package.json
-└── README.md
+prisma/schema.prisma        database schema
+src/app/                    pages (dashboard, calendar, events, onboarding, settings)
+src/app/api/                routes: events, emails, ingest, cron/sweep, metrics, profile, miss, sources
+src/components/             EventCard, EventFeed, MiniCalendar, MetricsCard, ProfileEditor, …
+src/lib/detection/          ics, schema.org, keyword gate, pre-filter
+src/lib/services/           gmail, ingest, detect, extract, calendar, sweep, scheduler, handshake
+src/lib/                    auth, apiAuth, dataSource, metrics, retry, profile
+scripts/                    seed, weekly metrics, golden-set snapshot, extractor A/B, pre-filter replay
+docs/                       architecture, cost, metrics, handshake
 ```
-
-## MVP Phases
-
-| Phase | Scope                | Timeline  |
-|-------|----------------------|-----------|
-| 1     | Email parsing        | Week 1–2  |
-| 2     | Event extraction     | Week 3–4  |
-| 3     | UI dashboard         | Week 5–6  |
-| 4     | Calendar automation  | Week 7–8  |
-
-See the interactive [Product Design Spec](src/app/dashboard/design-spec.tsx) for full details on architecture, schemas, edge cases, and tech decisions.
 
 ## License
 
