@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAuthorizedViewer } from "@/lib/apiAuth";
+import { getViewer } from "@/lib/apiAuth";
 import { listEvents } from "@/lib/dataSource";
 import type { MockEvent } from "@/lib/mock/events";
 
@@ -13,18 +13,20 @@ const validStatuses: MockEvent["status"][] = [
 ];
 
 export async function GET(req: Request) {
-  if (!(await isAuthorizedViewer())) {
+  const viewer = await getViewer();
+  if (!viewer) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
   const { searchParams } = new URL(req.url);
   const statusParam = searchParams.get("status");
-  const limit = Number(searchParams.get("limit") ?? "100");
+  const requested = Number(searchParams.get("limit") ?? "100");
+  const limit = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 500) : 100;
 
   const status =
     statusParam && validStatuses.includes(statusParam as MockEvent["status"])
       ? (statusParam as MockEvent["status"])
       : undefined;
 
-  const events = await listEvents({ status, limit });
+  const events = await listEvents(viewer, { status, limit });
   return NextResponse.json({ events });
 }

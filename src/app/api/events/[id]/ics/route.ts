@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getViewer } from "@/lib/apiAuth";
 import { getEvent } from "@/lib/dataSource";
 import { buildSingleEvent } from "@/lib/ics";
 
@@ -8,8 +9,12 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewer = await getViewer();
+  if (!viewer) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
   const { id } = await params;
-  const event = await getEvent(id);
+  const event = await getEvent(viewer, id);
 
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });

@@ -24,10 +24,17 @@ export async function POST(req: Request) {
   const encoded = body?.message?.data;
   if (!encoded) return NextResponse.json({ ok: true, skipped: "no-data" });
 
-  const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as {
-    emailAddress: string;
-    historyId: string;
-  };
+  // Pub/Sub retries anything that is not a 2xx, so a payload we cannot read
+  // is acknowledged and dropped rather than answered with a 500 forever.
+  let decoded: { emailAddress?: string; historyId?: string };
+  try {
+    decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  } catch {
+    return NextResponse.json({ ok: true, skipped: "bad-payload" });
+  }
+  if (typeof decoded?.emailAddress !== "string") {
+    return NextResponse.json({ ok: true, skipped: "bad-payload" });
+  }
 
   const user = await prisma.user.findUnique({
     where: { email: decoded.emailAddress },

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { isAuthorizedViewer } from "@/lib/apiAuth";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getViewer } from "@/lib/apiAuth";
 import { getEvent, updateEvent } from "@/lib/dataSource";
+import { decisionDelta, recordMetrics } from "@/lib/metrics";
 import { syncEventToCalendar, unsyncEvent } from "@/lib/services/calendar";
 import type { MockEvent } from "@/lib/mock/events";
 
@@ -19,11 +18,12 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await isAuthorizedViewer())) {
+  const viewer = await getViewer();
+  if (!viewer) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
   const { id } = await params;
-  const event = await getEvent(id);
+  const event = await getEvent(viewer, id);
   if (!event) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ event });
 }
@@ -32,7 +32,8 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await isAuthorizedViewer())) {
+  const viewer = await getViewer();
+  if (!viewer) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
   const { id } = await params;
@@ -59,31 +60,29 @@ export async function PATCH(
   const description =
     typeof body.description === "string" ? body.description.trim() : undefined;
 
-  const event = await updateEvent(id, {
+  const updated = await updateEvent(viewer, id, {
     status,
     title,
     locationName,
     locationAddress,
     description,
   });
-  if (!event) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const { event, previousStatus } = updated;
 
   // Deciding a card drives the calendar: Attend writes the event to Google
   // Calendar, walking it back removes it. Calendar failures are isolated —
-  // the status change above always sticks.
+  // the status change above always sticks. Only a real change of status does
+  // any of this; re-sending the same status is a no-op.
   let calendar: "synced" | "removed" | "skipped" | "failed" = "skipped";
-  if (status && status !== "PENDING") {
+  const userId = viewer.demo ? null : viewer.userId;
+  if (status && status !== previousStatus && userId) {
+    await recordMetrics(userId, decisionDelta(previousStatus, status));
     try {
-      const session = await getServerSession(authOptions);
-      if (session?.user?.id) {
-        if (status === "ACCEPTED") {
-          calendar = (await syncEventToCalendar(session.user.id, id))
-            ? "synced"
-            : "failed";
-        } else {
-          await unsyncEvent(session.user.id, id);
-          calendar = "removed";
-        }
+      if (status === "ACCEPTED") {
+        calendar = (await syncEventToCalendar(userId, id)) ? "synced" : "failed";
+      } else if (previousStatus === "ACCEPTED") {
+        calendar = (await unsyncEvent(userId, id)) ? "removed" : "skipped";
       }
     } catch (err) {
       console.error("[calendar] auto-sync failed:", err);
