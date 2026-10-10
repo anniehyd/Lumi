@@ -25,7 +25,7 @@ export type UserProfile = {
 };
 
 /** Bump when the prompt's shape changes, so Event.promptVersion stays meaningful. */
-export const PROMPT_VERSION = "v2-profile";
+export const PROMPT_VERSION = "v3-profile";
 
 export const ROLES = [
   { id: "cs", label: "CS / engineering" },

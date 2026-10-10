@@ -14,12 +14,18 @@ export function parseIcs(content: string): ExtractedEvent[] {
       const comp = data[key];
       if (comp.type !== "VEVENT") continue;
 
+      // One malformed VEVENT (no DTSTART, unparseable date) must not discard
+      // the rest of the calendar — a Handshake feed carries dozens.
+      const start = comp.start as (Date & { tz?: string }) | undefined;
+      if (!(start instanceof Date) || Number.isNaN(start.getTime())) continue;
+      const end = comp.end as Date | undefined;
+
       events.push({
-        title: (comp.summary as string) ?? "Untitled event",
+        title: (comp.summary as string) || "Untitled event",
         description: (comp.description as string) ?? "",
-        startTime: (comp.start as Date).toISOString(),
-        endTime: comp.end ? (comp.end as Date).toISOString() : undefined,
-        timezone: (comp.start as Date & { tz?: string }).tz ?? "UTC",
+        startTime: start.toISOString(),
+        endTime: end instanceof Date && !Number.isNaN(end.getTime()) ? end.toISOString() : undefined,
+        timezone: start.tz ?? "UTC",
         locationName: (comp.location as string) ?? undefined,
         organizerName:
           (comp.organizer as { params?: { CN?: string } })?.params?.CN ?? undefined,

@@ -17,9 +17,13 @@ export type Usage = { inputTokens: number; outputTokens: number };
 
 const PRICES: Record<string, { in: number; out: number }> = {
   // Anthropic — https://docs.anthropic.com/en/docs/about-claude/pricing
+  "claude-sonnet-5-5": { in: 2.0, out: 10.0 },
   "claude-sonnet-5": { in: 2.0, out: 10.0 },
   "claude-sonnet-4-6": { in: 3.0, out: 15.0 },
   "claude-haiku-4-5": { in: 1.0, out: 5.0 },
+  // Rate for prompts up to 100K tokens ($0.50 / $2.50 beyond). Lumi's calls
+  // are capped far below that by MAX_MODEL_CHARS in prefilter.ts.
+  "claude-haiku-5-5": { in: 0.1, out: 0.5 },
   // Qwen — Alibaba Cloud Model Studio, international endpoint.
   // `qwen-flash` is an alias that Alibaba repoints at newer snapshots, so its
   // rate can move under you. Pin a dated/versioned id if the bill must be

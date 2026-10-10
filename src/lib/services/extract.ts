@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ExtractedEvent } from "@/lib/detection/types";
-import { logUsage, type Usage } from "@/lib/services/llm-cost";
+import { costUsd, logUsage, type Usage } from "@/lib/services/llm-cost";
 import { rubricFor, DEFAULT_PROFILE, PROMPT_VERSION, type UserProfile } from "@/lib/profile";
+import { compactBody, restoreLink } from "@/lib/detection/prefilter";
+import { withRetry } from "@/lib/retry";
 
 /**
  * Structured event extraction via forced tool use — the model must call
@@ -29,14 +31,38 @@ type Provider = "anthropic" | "qwen";
  * providers in one process.
  */
 function config(): { model: string; provider: Provider } {
-  const model = process.env.LLM_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+  // `||` not `??`: an empty LLM_MODEL= line in .env means "unset".
+  const model = process.env.LLM_MODEL || process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
   const provider =
     (process.env.LLM_PROVIDER?.toLowerCase() as Provider) ||
     (model.startsWith("claude") ? "anthropic" : "qwen");
   return { model, provider };
 }
 
-const MAX_TOKENS = 2000;
+/**
+ * What production ran before the shutdown (commit 14e647a) and what
+ * .env.example has always suggested. The old in-code fallback was Sonnet 4.6,
+ * 3× the price, and only applied when the env var was forgotten.
+ */
+export const DEFAULT_MODEL = "claude-haiku-4-5";
+
+// A digest can carry a dozen events at ~150 output tokens each; 2000 cut the
+// tool call off mid-JSON on the longest ones, which loses the whole email.
+const MAX_TOKENS = 4096;
+const REQUEST_TIMEOUT_MS = 60_000;
+
+/**
+ * Replace URLs with [Ln] placeholders before the model sees the email.
+ * On by default; set LLM_COMPACT_LINKS=false to send bodies verbatim.
+ */
+function compactLinks(): boolean {
+  return process.env.LLM_COMPACT_LINKS !== "false";
+}
+
+/** Stamped on Event.promptVersion so a prompt change is visible in the metrics. */
+export function activePromptVersion(): string {
+  return compactLinks() ? `${PROMPT_VERSION}+links` : PROMPT_VERSION;
+}
 const TOOL_NAME = "save_events";
 const TOOL_DESCRIPTION =
   "Save the events found in this email. If the email contains no events, pass an empty array. Extract every distinct event — newsletters often bundle several.";
@@ -46,7 +72,9 @@ function getClient(): Anthropic | null {
   if (client) return client;
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
-  client = new Anthropic({ apiKey: key });
+  // The SDK retries 408/409/429/5xx and connection errors itself, with
+  // backoff; one more than its default of 2 because a sweep is unattended.
+  client = new Anthropic({ apiKey: key, maxRetries: 3, timeout: REQUEST_TIMEOUT_MS });
   return client;
 }
 
@@ -128,11 +156,18 @@ Rules:
 - Job postings, general announcements without a time, and unsubscribe footers are NOT events.
 - If no events, return an empty array.
 - Always infer a timezone. Default to the sender's likely timezone (e.g. US universities → America/New_York).
-- Confidence: 1.0 = explicit date + location + RSVP; 0.8 = date + title; <0.7 = ambiguous.
-- Use the current year (2026) if the email omits it and the date would otherwise be in the past.`;
+- Confidence: 1.0 = explicit date + location + RSVP; 0.8 = date + title; <0.7 = ambiguous.`;
 
-function systemPromptFor(profile: UserProfile): string {
-  return `${EXTRACTION_RULES}\n\n${rubricFor(profile)}`;
+const LINK_RULE = `- Links in the email are shown as placeholders like [L1], [L2]. When an event
+  has an RSVP or registration link, return its placeholder exactly as written
+  (for example "[L3]"). Never invent a URL.`;
+
+function systemPromptFor(profile: UserProfile, year: number): string {
+  // The year comes from the email's own date, not the wall clock or a
+  // literal, so a January sweep of December mail still resolves correctly.
+  const yearRule = `- Use the year the email was received (${year}) when the email omits it; if that date would already be in the past relative to the email, use the next year.`;
+  const rules = [EXTRACTION_RULES, yearRule, ...(compactLinks() ? [LINK_RULE] : [])].join("\n");
+  return `${rules}\n\n${rubricFor(profile)}`;
 }
 
 /** What a provider hands back: the raw tool payload plus token counts. */
@@ -150,6 +185,11 @@ async function callAnthropic(model: string, system: string, userContent: string)
     tool_choice: { type: "tool", name: TOOL_NAME },
     messages: [{ role: "user", content: userContent }],
   });
+
+  if (response.stop_reason === "max_tokens") {
+    // The tool input was cut off, so whatever parsed is incomplete.
+    console.warn(`[extract] ${model} hit max_tokens (${MAX_TOKENS}); events from this email may be missing`);
+  }
 
   const toolUse = response.content.find((c) => c.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") return null;
@@ -201,16 +241,30 @@ async function callQwen(model: string, system: string, userContent: string): Pro
     tool_choice: forced ? { type: "function", function: { name: TOOL_NAME } } : "auto",
   });
 
+  // Rate limits, 5xx and dropped connections are retried; a 400 is returned
+  // to the caller below, which knows how to react to the tool_choice one.
   async function post(forced: boolean): Promise<Response> {
-    return fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${key}`,
+    return withRetry(
+      async () => {
+        const res = await fetch(`${base}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify(body(forced)),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+        if (res.status === 429 || res.status >= 500) {
+          throw Object.assign(new Error(`${model} extraction failed (${res.status})`), {
+            status: res.status,
+            headers: res.headers,
+          });
+        }
+        return res;
       },
-      body: JSON.stringify(body(forced)),
-      signal: AbortSignal.timeout(60_000),
-    });
+      { label: `llm.${model}` }
+    );
   }
 
   let res = await post(true);
@@ -277,34 +331,49 @@ function assertConfigured(model: string, provider: Provider): void {
   }
 }
 
-export async function extractEvents(input: {
+export type ExtractionInput = {
   subject: string;
   from: string;
   bodyText: string;
   receivedAt: Date;
   /** Omitted only by scripts; production always passes the user's profile. */
   profile?: UserProfile;
-}): Promise<ExtractedEvent[]> {
-  const userContent = `From: ${input.from}
-Subject: ${input.subject}
-Received: ${input.receivedAt.toISOString()}
+};
 
----
+export type ExtractionResult = {
+  events: ExtractedEvent[];
+  /** False when no provider is configured (demo mode) — no call was made. */
+  called: boolean;
+  usage: Usage;
+  /** Null when the model has no price on file. */
+  usd: number | null;
+};
 
-${input.bodyText}`;
+const CONFIDENCE_FALLBACK = 0.7;
+const RELEVANCE_FALLBACK = 3;
 
-  const { model, provider } = config();
-  assertConfigured(model, provider);
-  const system = systemPromptFor(input.profile ?? DEFAULT_PROFILE);
-  const started = Date.now();
-  const call =
-    provider === "qwen"
-      ? await callQwen(model, system, userContent)
-      : await callAnthropic(model, system, userContent);
-  if (!call) return [];
+/** Relevance is a 1–5 star rating; anything else the model returns is pulled into range. */
+export function clampRelevance(value: unknown): number {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n)) return RELEVANCE_FALLBACK;
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
 
+function clampConfidence(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return CONFIDENCE_FALLBACK;
+  return Math.min(1, Math.max(0, value));
+}
+
+const KINDS: ExtractedEvent["kind"][] = ["MEETING", "INFO_SESSION", "DEADLINE", "COFFEE_CHAT"];
+
+/**
+ * Turn the raw tool payload into trusted events: tolerate the shapes models
+ * actually return, drop anything without a title and a parseable start, pull
+ * scores into range, and resolve link placeholders.
+ */
+export function normalizeEvents(payload: unknown, links: string[] = []): ExtractedEvent[] {
   // The model occasionally returns the events array JSON-encoded as a string.
-  let raw = call.payload;
+  let raw = payload;
   if (typeof raw === "string") {
     try {
       raw = JSON.parse(raw);
@@ -314,41 +383,76 @@ ${input.bodyText}`;
   }
   const events = (Array.isArray(raw) ? raw : []) as Partial<ExtractedEvent>[];
 
-  const result = events.filter(isValid).map((e) => ({
-    title: e.title!,
-    description: e.description ?? "",
-    startTime: e.startTime!,
-    endTime: e.endTime,
-    timezone: e.timezone!,
+  return events.filter(isValid).map((e) => ({
+    title: e.title.trim(),
+    description: typeof e.description === "string" ? e.description : "",
+    startTime: e.startTime,
+    endTime: isDateString(e.endTime) ? e.endTime : undefined,
+    timezone: typeof e.timezone === "string" && e.timezone ? e.timezone : "America/New_York",
     locationName: e.locationName,
     locationAddress: e.locationAddress,
     organizerName: e.organizerName,
     organizerCompany: e.organizerCompany,
-    rsvpLink: e.rsvpLink,
-    rsvpDeadline: e.rsvpDeadline,
+    rsvpLink: restoreLink(e.rsvpLink, links),
+    rsvpDeadline: isDateString(e.rsvpDeadline) ? e.rsvpDeadline : undefined,
     attire: e.attire,
-    confidence: e.confidence ?? 0.7,
-    kind: (e.kind ?? "MEETING") as ExtractedEvent["kind"],
-    relevance: Math.min(5, Math.max(1, Math.round(e.relevance ?? 3))),
+    confidence: clampConfidence(e.confidence),
+    kind: KINDS.includes(e.kind as ExtractedEvent["kind"]) ? (e.kind as ExtractedEvent["kind"]) : "MEETING",
+    relevance: clampRelevance(e.relevance),
   }));
+}
+
+/** Extraction plus what it cost — the pipeline uses this to feed the metrics. */
+export async function extractEventsDetailed(input: ExtractionInput): Promise<ExtractionResult> {
+  const compact = compactBody(input.bodyText, { links: compactLinks() });
+  if (compact.truncated) {
+    console.warn(`[extract] body over the size ceiling, truncated: "${input.subject.slice(0, 60)}"`);
+  }
+  const userContent = `From: ${input.from}
+Subject: ${input.subject}
+Received: ${input.receivedAt.toISOString()}
+
+---
+
+${compact.text}`;
+
+  const { model, provider } = config();
+  assertConfigured(model, provider);
+  const system = systemPromptFor(input.profile ?? DEFAULT_PROFILE, input.receivedAt.getUTCFullYear());
+  const started = Date.now();
+  const call =
+    provider === "qwen"
+      ? await callQwen(model, system, userContent)
+      : await callAnthropic(model, system, userContent);
+  if (!call) return { events: [], called: false, usage: { inputTokens: 0, outputTokens: 0 }, usd: null };
+
+  const events = normalizeEvents(call.payload, compact.links);
 
   logUsage({
     provider,
     model,
     usage: call.usage,
-    events: result.length,
+    events: events.length,
     ms: Date.now() - started,
-    promptVersion: PROMPT_VERSION,
+    promptVersion: activePromptVersion(),
   });
 
-  return result;
+  return { events, called: true, usage: call.usage, usd: costUsd(model, call.usage) };
+}
+
+export async function extractEvents(input: ExtractionInput): Promise<ExtractedEvent[]> {
+  return (await extractEventsDetailed(input)).events;
 }
 
 /** @deprecated Use `extractEvents` — the extractor is no longer Claude-specific. */
 export const extractWithClaude = extractEvents;
 
+function isDateString(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
 function isValid(e: Partial<ExtractedEvent>): e is ExtractedEvent {
-  return typeof e.title === "string" && typeof e.startTime === "string";
+  return typeof e?.title === "string" && e.title.trim().length > 0 && isDateString(e.startTime);
 }
 
 /** The model id this process would use right now — for stamping attribution. */
