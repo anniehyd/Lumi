@@ -16,16 +16,23 @@ export type Viewer = {
   demo: boolean;
 };
 
-const DEMO_USER_EMAIL = process.env.LUMI_DEMO_USER_EMAIL || "yh5536@nyu.edu";
+// Which account demo mode shows. LUMI_DEMO_USER_EMAIL picks one explicitly;
+// otherwise the sole user in the database (the usual seeded local setup). With
+// several users and no setting, demo mode serves mocks rather than guess.
+const DEMO_USER_EMAIL = process.env.LUMI_DEMO_USER_EMAIL?.trim();
 
 async function demoUserId(): Promise<string | null> {
   if (!process.env.DATABASE_URL) return null;
   try {
-    const u = await prisma.user.findUnique({
-      where: { email: DEMO_USER_EMAIL },
-      select: { id: true },
-    });
-    return u?.id ?? null;
+    if (DEMO_USER_EMAIL) {
+      const u = await prisma.user.findUnique({
+        where: { email: DEMO_USER_EMAIL },
+        select: { id: true },
+      });
+      return u?.id ?? null;
+    }
+    const users = await prisma.user.findMany({ take: 2, select: { id: true } });
+    return users.length === 1 ? users[0].id : null;
   } catch {
     return null;
   }

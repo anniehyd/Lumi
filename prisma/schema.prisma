@@ -47,6 +47,10 @@ model User {
   handshakeFeedUrl String?
   // Set when the one-time onboarding flow completes. Null = show onboarding.
   onboardedAt      DateTime?
+  // Secret for this user's iCal subscription feed (/api/calendar.ics?token=).
+  // Calendar apps cannot sign in, so the token is the credential. Null until
+  // the user first opens the feed section in Settings; rotated on request.
+  calendarFeedToken String?  @unique
   // What this user wants Lumi to surface. Shape: src/lib/profile.ts UserProfile.
   // Null falls back to DEFAULT_PROFILE so extraction never breaks on a new user.
   profile          Json?

@@ -160,7 +160,8 @@ All keys live in `.env.example`. Summary:
 | `GET/PATCH  /api/events/[id]`    | Single event; PATCH to change status      |
 | `GET  /api/events/[id]/ics`      | Download single event as .ics             |
 | `POST/DELETE  /api/events/[id]/sync` | Write/remove from Google Calendar     |
-| `GET  /api/calendar.ics`         | Subscribable iCal feed (all accepted)     |
+| `GET  /api/calendar.ics?token=…` | Per-user iCal feed (accepted + maybe)     |
+| `GET/POST /api/calendar-feed`    | Mint / rotate the signed-in user's feed link |
 | `GET  /api/emails/[id]`          | Single email (source of an event)         |
 | `GET  /api/sync/status`          | Ingest health + DB connectivity           |
 | `GET  /api/metrics`              | Signed-in user's funnel (`?days=7`)       |

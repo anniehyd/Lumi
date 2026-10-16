@@ -14,7 +14,8 @@ const links = [
 export function Nav() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const userEmail = session?.user?.email ?? "yh5536@nyu.edu";
+  // No signed-in user means demo mode; never show a real address as a stand-in.
+  const userEmail = session?.user?.email ?? "Demo";
   const userImage = session?.user?.image ?? null;
 
   return (

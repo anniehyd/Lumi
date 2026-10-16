@@ -119,7 +119,7 @@ the model, so they all get the neutral 3.
 
 | Table | Purpose | Retention |
 |---|---|---|
-| `User`, `Account`, `Session` | NextAuth; `Account` holds the Google refresh token. `User.profile` is the interest profile, `User.onboardedAt` gates onboarding. | permanent |
+| `User`, `Account`, `Session` | NextAuth; `Account` holds the Google refresh token. `User.profile` is the interest profile, `User.onboardedAt` gates onboarding, `User.calendarFeedToken` is the secret in that user's iCal subscription link. | permanent |
 | `Email` | Stored message, with `processed`, `attempts`, `skipReason`, `contentHash`. Unique per `(userId, messageId)`. | 14 days |
 | `Event` | Extracted event: status, relevance, conflict title, provenance (`detectedVia`, `extractedBy`, `promptVersion`). | 14 days after it passes or is decided |
 | `SenderStat` | Per-sender model calls and events found, for the `sender_history` rule. | permanent, tiny |
@@ -163,11 +163,7 @@ Worth knowing so you are not surprised in a code walkthrough:
   calls `startWatch`, so no watch is ever registered. Ingestion is polling.
 - **Maybe reminders.** `scheduleMaybeReminder` in `src/lib/queue.ts` is never
   called; no reminder is ever scheduled.
-- **Settings page controls.** The toggles, keyword list, calendar id and
-  timezone on `/settings` are local component state and are not saved. The
-  "Connected inbox" row shows a hardcoded address and says mail is scanned "in
-  real time via Gmail API push".
-- **`/api/calendar.ics`** serves one user chosen by env var; it is a
-  single-user feature.
+- **`User.timezone`** exists in the schema but nothing reads it; the model
+  infers a timezone per event instead.
 - **README project tree** described files that never existed; it is corrected
   on this branch.
