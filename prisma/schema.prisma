@@ -51,6 +51,11 @@ model User {
   // Calendar apps cannot sign in, so the token is the credential. Null until
   // the user first opens the feed section in Settings; rotated on request.
   calendarFeedToken String?  @unique
+  // Secret in this user's forwarding address (lumi+<token>@INBOUND_EMAIL_DOMAIN).
+  // Mail sent there is ingested for this user by POST /api/ingest/inbound, so
+  // a user never has to grant Gmail access. Null until they open the
+  // "Forward to Lumi" section in Settings; rotated on request.
+  forwardingToken   String?  @unique
   // What this user wants Lumi to surface. Shape: src/lib/profile.ts UserProfile.
   // Null falls back to DEFAULT_PROFILE so extraction never breaks on a new user.
   profile          Json?

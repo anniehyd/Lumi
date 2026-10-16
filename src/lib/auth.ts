@@ -52,6 +52,20 @@ export const authOptions: NextAuthOptions = {
 };
 
 /**
+ * Whether the user signed in with Google at all. A user who only forwards
+ * mail to Lumi (src/lib/forwardingToken.ts) has no Account row, so Gmail and
+ * Google Calendar are simply not available to them — callers degrade to the
+ * iCal feed rather than report an error.
+ */
+export async function hasGoogleAccount(userId: string): Promise<boolean> {
+  const account = await prisma.account.findFirst({
+    where: { userId, provider: "google" },
+    select: { id: true },
+  });
+  return account !== null;
+}
+
+/**
  * Fetch a user's Google access token, refreshing if expired.
  * Returns null if the user isn't connected or refresh fails.
  */

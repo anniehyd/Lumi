@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getViewer } from "@/lib/apiAuth";
+import { hasGoogleAccount } from "@/lib/auth";
 import { getEvent, updateEvent } from "@/lib/dataSource";
 import { decisionDelta, recordMetrics } from "@/lib/metrics";
 import { syncEventToCalendar, unsyncEvent } from "@/lib/services/calendar";
@@ -74,13 +75,17 @@ export async function PATCH(
   // Calendar, walking it back removes it. Calendar failures are isolated —
   // the status change above always sticks. Only a real change of status does
   // any of this; re-sending the same status is a no-op.
-  let calendar: "synced" | "removed" | "skipped" | "failed" = "skipped";
+  // "feed" means the user has no Google Calendar (they forward mail instead
+  // of signing in with Gmail); the accepted event reaches them through their
+  // iCal subscription, so nothing is written and nothing has failed.
+  let calendar: "synced" | "removed" | "skipped" | "failed" | "feed" = "skipped";
   const userId = viewer.demo ? null : viewer.userId;
   if (status && status !== previousStatus && userId) {
     await recordMetrics(userId, decisionDelta(previousStatus, status));
     try {
       if (status === "ACCEPTED") {
-        calendar = (await syncEventToCalendar(userId, id)) ? "synced" : "failed";
+        if (await syncEventToCalendar(userId, id)) calendar = "synced";
+        else calendar = (await hasGoogleAccount(userId)) ? "failed" : "feed";
       } else if (previousStatus === "ACCEPTED") {
         calendar = (await unsyncEvent(userId, id)) ? "removed" : "skipped";
       }

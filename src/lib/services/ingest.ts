@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { listMessages, fetchMessage } from "@/lib/services/gmail";
+import { listMessages, fetchMessage, type ParsedMessage } from "@/lib/services/gmail";
 import { processEmail, persistEvents, type PipelineResult } from "@/lib/services/detect";
 import { fetchHandshakeEvents, HandshakeFeedError } from "@/lib/services/handshake";
 import { contentHash } from "@/lib/detection/prefilter";
@@ -80,55 +80,114 @@ export async function ingestUser(
     }
     if (!parsed) continue;
 
-    let email;
-    try {
-      email = await prisma.email.create({
-        data: {
-          userId,
-          messageId: parsed.messageId,
-          gmailId,
-          threadId: parsed.threadId || null,
-          from: parsed.from,
-          subject: parsed.subject,
-          bodyText: parsed.bodyText,
-          bodyHtml: parsed.bodyHtml,
-          receivedAt: parsed.receivedAt,
-          hasIcs: parsed.hasIcs,
-          processed: false,
-          contentHash: contentHash(parsed.from, parsed.subject, parsed.bodyText),
-        },
-      });
-    } catch (err) {
-      // Already stored: a row from before gmailId existed, or a concurrent
-      // sweep that got here first. Either way it is not new.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") continue;
-      throw err;
-    }
+    const stored = await storeAndDetect(userId, parsed, counters);
+    if (!stored.stored) continue;
     result.newEmails++;
-    counters.emailsScanned = (counters.emailsScanned ?? 0) + 1;
-
-    const outcome = await detect(userId, email.id, gmailId, {
-      bodyText: parsed.bodyText,
-      bodyHtml: parsed.bodyHtml,
-      icsContent: parsed.icsContent,
-      subject: parsed.subject,
-      from: parsed.from,
-      receivedAt: parsed.receivedAt,
-      threadId: parsed.threadId || null,
-      listUnsubscribe: parsed.listUnsubscribe,
-    });
-    if (!outcome) {
+    if (!stored.outcome) {
       result.failed++;
       continue;
     }
-    tally(counters, outcome);
-    result.eventsCreated += outcome.created;
-    if (outcome.skip) result.skipped++;
-    if (outcome.llm.called) result.sentToModel++;
+    result.eventsCreated += stored.outcome.created;
+    if (stored.outcome.skip) result.skipped++;
+    if (stored.outcome.llm.called) result.sentToModel++;
   }
 
   await recordMetrics(userId, counters);
   return result;
+}
+
+/**
+ * Store one parsed message as an Email row and run detection on it. The one
+ * place a message enters the pipeline, whichever way it arrived (Gmail fetch
+ * or the inbound-forwarding webhook), so both produce identical rows.
+ *
+ * `stored: false` means the row already existed (same user, same Message-ID)
+ * and nothing was done. `outcome: null` means detection threw; the row stays
+ * unprocessed and retryUnprocessed picks it up on a later sweep.
+ */
+export async function storeAndDetect(
+  userId: string,
+  parsed: ParsedMessage,
+  counters: Partial<Counters>,
+  opts: { detect?: boolean; skipReason?: string } = {}
+): Promise<{ stored: boolean; emailId: string | null; outcome: PipelineResult | null }> {
+  const gmailId = parsed.gmailId || null;
+  const detectIt = opts.detect !== false;
+  let email;
+  try {
+    email = await prisma.email.create({
+      data: {
+        userId,
+        messageId: parsed.messageId,
+        gmailId,
+        threadId: parsed.threadId || null,
+        from: parsed.from,
+        subject: parsed.subject,
+        bodyText: parsed.bodyText,
+        bodyHtml: parsed.bodyHtml,
+        receivedAt: parsed.receivedAt,
+        hasIcs: parsed.hasIcs,
+        processed: !detectIt,
+        ...(detectIt ? {} : { skipReason: opts.skipReason ?? null }),
+        contentHash: contentHash(parsed.from, parsed.subject, parsed.bodyText),
+      },
+    });
+  } catch (err) {
+    // Already stored: a row from before gmailId existed, a concurrent sweep
+    // that got here first, or the provider redelivering a webhook. Either way
+    // it is not new.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { stored: false, emailId: null, outcome: null };
+    }
+    throw err;
+  }
+  counters.emailsScanned = (counters.emailsScanned ?? 0) + 1;
+  if (!detectIt) return { stored: true, emailId: email.id, outcome: null };
+
+  const outcome = await detect(userId, email.id, gmailId ?? parsed.messageId, {
+    bodyText: parsed.bodyText,
+    bodyHtml: parsed.bodyHtml,
+    icsContent: parsed.icsContent,
+    subject: parsed.subject,
+    from: parsed.from,
+    receivedAt: parsed.receivedAt,
+    threadId: parsed.threadId || null,
+    listUnsubscribe: parsed.listUnsubscribe,
+  });
+  if (outcome) tally(counters, outcome);
+  return { stored: true, emailId: email.id, outcome };
+}
+
+export type InboundResult = {
+  /** False when this Message-ID was already stored for the user. */
+  stored: boolean;
+  emailId: string | null;
+  /** Why the model was not called, when it was not. */
+  skipped: string | null;
+  eventsCreated: number;
+  /** Detection threw; the email is retried on a later sweep. */
+  failed: boolean;
+};
+
+/**
+ * Ingest one message that arrived by forwarding rather than from Gmail.
+ * Same storage, same detection, same metrics as ingestUser, for one email.
+ */
+export async function ingestInbound(
+  userId: string,
+  parsed: ParsedMessage,
+  opts: { detect?: boolean; skipReason?: string } = {}
+): Promise<InboundResult> {
+  const counters: Partial<Counters> = {};
+  const r = await storeAndDetect(userId, parsed, counters, opts);
+  await recordMetrics(userId, counters);
+  return {
+    stored: r.stored,
+    emailId: r.emailId,
+    skipped: r.outcome?.skip ?? (opts.detect === false ? (opts.skipReason ?? "not_detected") : null),
+    eventsCreated: r.outcome?.created ?? 0,
+    failed: r.stored && opts.detect !== false && r.outcome === null,
+  };
 }
 
 /** Run detection for one stored email and record the outcome on its row. */

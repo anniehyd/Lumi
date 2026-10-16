@@ -48,6 +48,7 @@ export default function SettingsPage() {
 
         <Section icon={<Mail className="w-4 h-4" />} title="Email source">
           <InboxRow signedIn={signedIn} email={session?.user?.email ?? null} />
+          <ForwardingRow signedIn={signedIn} />
         </Section>
 
         <Section icon={<Link2 className="w-4 h-4" />} title="Handshake">
@@ -66,7 +67,7 @@ export default function SettingsPage() {
           <MetricsCard />
         </Section>
 
-        <Section icon={<Rss className="w-4 h-4" />} title="Sync to Apple Calendar">
+        <Section icon={<Rss className="w-4 h-4" />} title="Sync to Apple Calendar" id="calendar-feed">
           <FeedSection signedIn={signedIn} />
         </Section>
       </main>
@@ -175,6 +176,190 @@ function InboxRow({ signedIn, email }: { signedIn: boolean; email: string | null
         </div>
       </Row>
     </>
+  );
+}
+
+/* ─── Forward to Lumi (no Gmail permission) ─── */
+
+type ForwardingStatus = {
+  configured: boolean;
+  address: string | null;
+  gmailConnected: boolean;
+  confirmation: { code: string | null; link: string | null; forwarder: string | null; receivedAt: string } | null;
+  lastReceivedAt: string | null;
+};
+
+/**
+ * The alternative to granting Gmail access: a private address the user
+ * forwards newsletters to. Events come back through the dashboard and the
+ * iCal feed exactly as they would from a connected inbox.
+ */
+function ForwardingRow({ signedIn }: { signedIn: boolean }) {
+  const qc = useQueryClient();
+  const [copied, setCopied] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["forwarding"],
+    queryFn: async () => {
+      const res = await fetch("/api/sources/forwarding");
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as ForwardingStatus;
+    },
+    enabled: signedIn,
+    retry: false,
+    // Gmail's confirmation mail arrives within a minute of the user asking
+    // for it; poll until it has.
+    refetchInterval: (q) => (q.state.data && !q.state.data.confirmation ? 20_000 : false),
+  });
+
+  const rotate = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/sources/forwarding", { method: "POST" });
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as ForwardingStatus;
+    },
+    onSuccess: (next) => qc.setQueryData(["forwarding"], next),
+  });
+
+  async function copyAddress() {
+    if (!data?.address) return;
+    await navigator.clipboard.writeText(data.address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  if (!signedIn) {
+    return (
+      <Row label="Forward to Lumi" sub="Sign in to get a private forwarding address.">
+        <span className="text-[11px] text-lumi-subtle">Sign in</span>
+      </Row>
+    );
+  }
+
+  if (data && !data.configured) {
+    return (
+      <Row
+        label="Forward to Lumi"
+        sub="Not available on this deployment: no inbound email domain is configured (INBOUND_EMAIL_DOMAIN)."
+      >
+        <span className="text-[11px] text-lumi-subtle">Unavailable</span>
+      </Row>
+    );
+  }
+
+  return (
+    <div className="px-5 py-4">
+      <div className="text-sm text-lumi-text">Forward to Lumi</div>
+      <p className="mt-0.5 text-xs text-lumi-muted leading-relaxed mb-3">
+        {data?.gmailConnected
+          ? "Also works alongside your connected inbox: anything forwarded here is read even if it lands outside the Inbox tab."
+          : "No Gmail permission needed. Forward newsletters and invitations to this address and Lumi turns them into cards here and events in your calendar feed."}
+      </p>
+
+      <div className="rounded-lg border border-lumi-border bg-lumi-bg p-3 flex items-center gap-2">
+        <code className="flex-1 text-xs text-lumi-text font-mono truncate">
+          {isLoading ? "Loading…" : (data?.address ?? "Unavailable")}
+        </code>
+        <button
+          onClick={copyAddress}
+          disabled={!data?.address}
+          className="flex items-center gap-1 text-xs text-lumi-muted hover:text-lumi-text px-2 py-1 rounded hover:bg-lumi-surface transition-colors disabled:opacity-40"
+        >
+          {copied ? (
+            <>
+              <Check className="w-3 h-3 text-lumi-green" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="w-3 h-3" />
+              Copy address
+            </>
+          )}
+        </button>
+      </div>
+
+      {data?.confirmation && (
+        <div className="mt-3 rounded-lg border border-lumi-accent/40 bg-lumi-accent/10 p-3 text-xs text-lumi-text">
+          <div className="font-medium">
+            Gmail asked to confirm forwarding
+            {data.confirmation.forwarder ? ` from ${data.confirmation.forwarder}` : ""}.
+          </div>
+          <div className="mt-1 text-lumi-muted leading-relaxed">
+            {data.confirmation.code ? (
+              <>
+                Paste this code into the Gmail dialog:{" "}
+                <code className="font-mono text-lumi-text">{data.confirmation.code}</code>
+                {data.confirmation.link ? ", or " : "."}
+              </>
+            ) : null}
+            {data.confirmation.link ? (
+              <a
+                href={data.confirmation.link}
+                target="_blank"
+                rel="noreferrer"
+                className="text-lumi-accent hover:underline"
+              >
+                confirm with one click
+              </a>
+            ) : null}
+            {data.confirmation.link ? "." : ""}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-lumi-subtle">
+          {data?.lastReceivedAt
+            ? `Last forwarded email received ${new Date(data.lastReceivedAt).toLocaleString()}`
+            : "Nothing received yet"}
+        </span>
+        <button
+          onClick={() => rotate.mutate()}
+          disabled={!data?.address || rotate.isPending}
+          className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-1.5 text-xs font-medium text-lumi-muted hover:text-lumi-text hover:border-lumi-subtle transition-colors disabled:opacity-40"
+        >
+          {rotate.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+          New address
+        </button>
+      </div>
+      {rotate.isSuccess && (
+        <p className="mt-2 text-[11px] text-lumi-muted">
+          New address issued. Update your Gmail filter; mail to the old one is dropped.
+        </p>
+      )}
+
+      <details className="mt-4 text-xs text-lumi-muted group">
+        <summary className="cursor-pointer select-none text-lumi-subtle group-hover:text-lumi-muted">
+          Set up a Gmail filter that forwards automatically
+        </summary>
+        <ol className="mt-2 ml-5 list-decimal space-y-1 leading-relaxed">
+          <li>
+            Gmail → Settings → <span className="text-lumi-text">Forwarding and POP/IMAP</span> → Add a
+            forwarding address → paste the address above.
+          </li>
+          <li>
+            Gmail emails a confirmation to that address. The code shows up here within a minute; paste
+            it back into Gmail.
+          </li>
+          <li>
+            Gmail → Settings → <span className="text-lumi-text">Filters and Blocked Addresses</span> →
+            Create a new filter. Match the senders you want Lumi to read, for example{" "}
+            <code className="font-mono">from:(@nyu.edu OR @joinhandshake.com)</code>, or{" "}
+            <code className="font-mono">list:(*)</code> for every newsletter.
+          </li>
+          <li>Choose “Forward it to” and pick the address. Done: matching mail reaches Lumi as it arrives.</li>
+        </ol>
+        <p className="mt-2 leading-relaxed">
+          You can also forward a single email by hand; Lumi unwraps “Fwd:” messages and reads the
+          original sender.
+        </p>
+      </details>
+    </div>
   );
 }
 
@@ -403,14 +588,16 @@ function FeedSection({ signedIn }: { signedIn: boolean }) {
 function Section({
   icon,
   title,
+  id,
   children,
 }: {
   icon: React.ReactNode;
   title: string;
+  id?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="mb-8 rounded-xl border border-lumi-border bg-lumi-surface overflow-hidden">
+    <section id={id} className="mb-8 rounded-xl border border-lumi-border bg-lumi-surface overflow-hidden">
       <div className="px-5 py-3 border-b border-lumi-border flex items-center gap-2">
         <span className="text-lumi-accent">{icon}</span>
         <h2 className="font-serif text-base text-lumi-text">{title}</h2>

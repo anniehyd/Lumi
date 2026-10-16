@@ -21,7 +21,7 @@ cost. Demo mode still runs locally with no credentials (`npm install && npm run 
 Email arrives → Detection → LLM Extraction + Relevance scoring → Conflict check → Ranked Event Card → User decides → Calendar sync
 ```
 
-0. **Sources** — Gmail, plus the user's Handshake iCal export feed (Handshake has no student-facing API; see [docs/handshake.md](docs/handshake.md))
+0. **Sources** — Gmail, a private forwarding address (`lumi+<token>@…`, for users who grant no Gmail access; mail arrives through a Postmark inbound webhook), plus the user's Handshake iCal export feed (Handshake has no student-facing API; see [docs/handshake.md](docs/handshake.md))
 1. **Ingestion** — a worker sweeps Gmail twice a day (1 PM and 7 PM local, configurable via `INGEST_SWEEP_TIMES`), incrementally (only mail newer than what's already ingested, hard-capped to a rolling 14-day window). Every ingest path is bounded by `INGEST_GMAIL_FILTER` — inbox only, no Promotions/Social/Updates/Forums, no archived or sent mail
 2. **Detection** — Tiered classifier: ICS attachments → schema.org markup → keyword gate + rule-based pre-filter → LLM. The pre-filter skips surveys, mail with no date or time, duplicate content, replies that add nothing, and bulk senders with no track record, before any model call. Past events are dropped; the same event announced by two senders is fuzzy-deduped (start-time window + title overlap)
 3. **Extraction + Ranking** — Claude `tool_use` extracts structured event JSON and, in the same call, scores relevance 1–5★ against the user's interest profile (tech/SWE/product/cloud/AI/hackathons high, networking mid, unrelated low)
@@ -149,6 +149,8 @@ All keys live in `.env.example`. Summary:
 | `INGEST_SWEEP_TIMES`     | Worker       | Local `HH:MM` sweep times, default `13:00,19:00`; empty disables |
 | `INGEST_SWEEP_TZ`        | Worker       | IANA zone for those times, default `America/New_York`       |
 | `GMAIL_WEBHOOK_SECRET`   | Push ingest  | Shared secret Pub/Sub sends as `?token=…`                   |
+| `INBOUND_EMAIL_DOMAIN`   | Forwarding   | Domain users forward mail to (`lumi+<token>@` this). MX → Postmark. Empty hides the feature |
+| `INBOUND_WEBHOOK_SECRET` | Forwarding   | Shared secret Postmark presents as basic-auth password on `POST /api/ingest/inbound` |
 | `HANDSHAKE_ICS_URL`      | Handshake    | Personal iCal export link (Handshake → Settings → Calendar export). Single-user fallback; per-user setting lives in the DB. See [docs/handshake.md](docs/handshake.md) |
 | `LUMI_USE_MOCK_FALLBACK` | Demo         | `true` (default) falls back to mocks when DB unreachable    |
 
@@ -168,6 +170,8 @@ All keys live in `.env.example`. Summary:
 | `POST /api/cron/sweep`           | Run a sweep (bearer `CRON_SECRET`)        |
 | `POST /api/ingest/poll`          | Manual Gmail + Handshake scan (authed user) |
 | `GET/PUT/DELETE /api/sources/handshake` | Connect/disconnect the Handshake feed |
+| `GET/POST /api/sources/forwarding` | The user's forwarding address (GET mints, POST rotates) |
+| `POST /api/ingest/inbound`       | Postmark inbound webhook: one forwarded email in, same pipeline as Gmail |
 | `POST /api/ingest/webhook`       | Gmail Pub/Sub push handler                |
 
 ## Project Structure

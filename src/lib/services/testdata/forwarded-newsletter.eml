@@ -1,0 +1,27 @@
+Delivered-To: lumi+0123456789abcdef0123456789abcdef@inbound.lumi.test
+X-Forwarded-To: lumi+0123456789abcdef0123456789abcdef@inbound.lumi.test
+X-Forwarded-For: student@nyu.edu lumi+0123456789abcdef0123456789abcdef@inbound.lumi.test
+Received: from mail.nyu.edu by inbound.postmarkapp.com; Tue, 15 Sep 2099 12:00:05 +0000
+Message-ID: <newsletter-2099-09-15@lists.nyu.edu>
+Date: Tue, 15 Sep 2099 08:00:00 -0400
+From: NYU Tandon Career Services <careers@nyu.edu>
+To: Student <student@nyu.edu>
+Subject: Fall Tech Fair, Sept 24 at 1pm
+List-Unsubscribe: <mailto:unsubscribe@lists.nyu.edu>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+Join us for the Fall Tech Fair on Wednesday, September 24 at 1:00 PM in the
+Kimmel Center, Rosenthal Pavilion. Meet 40 companies hiring for summer 2100.
+
+RSVP: https://nyu.joinhandshake.com/events/12345
+
+--b1
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Join us for the <b>Fall Tech Fair</b> on Wednesday, September 24 at 1:00 PM in the Kimmel Center, Rosenthal Pavilion. Meet 40 companies hiring for summer 2100.</p><p><a href="https://nyu.joinhandshake.com/events/12345">RSVP</a></p></body></html>
+
+--b1--

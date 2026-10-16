@@ -18,7 +18,8 @@
  */
 import { Sentry } from "@/lib/services/instrument";
 import { MAIL_FILTER } from "@/lib/services/gmail";
-import { ingestUser, ingestHandshake, retryUnprocessed } from "@/lib/services/ingest";
+import { ingestUser, ingestHandshake, retryUnprocessed, type IngestResult } from "@/lib/services/ingest";
+import type { IngestJob } from "@/lib/queue";
 import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -96,13 +97,23 @@ export function ingestMode(): IngestMode {
 // isn't fetched — so the cap has to cover a full half-day of mail.
 const SWEEP_MAX_RESULTS = 250;
 
+const NO_GMAIL: IngestResult = { fetched: 0, newEmails: 0, skipped: 0, sentToModel: 0, eventsCreated: 0, failed: 0 };
+
 /**
  * Everything one user's sweep does, in order: Gmail, the Handshake feed, then
  * a second try at emails an earlier sweep failed on. Shared by the inline
  * sweep and the BullMQ consumer so the two modes cannot drift apart.
+ *
+ * A forwarding-only user (no Google account) gets `gmail: false`: their mail
+ * arrives through POST /api/ingest/inbound as it is sent, so the Gmail step
+ * is skipped outright, but the retry step still runs for them — a forwarded
+ * email whose detection failed is recovered the same way.
  */
-export async function runIngestJob(job: { userId: string; query?: string; maxResults?: number }) {
-  const result = await ingestUser(job.userId, { query: job.query, maxResults: job.maxResults });
+export async function runIngestJob(job: IngestJob) {
+  const result =
+    job.gmail === false
+      ? NO_GMAIL
+      : await ingestUser(job.userId, { query: job.query, maxResults: job.maxResults });
   // Handshake rides the same job; its own failures are swallowed inside
   // ingestHandshake so a rotated feed link cannot fail the Gmail half.
   const handshake = await ingestHandshake(job.userId);
@@ -110,14 +121,28 @@ export async function runIngestJob(job: { userId: string; query?: string; maxRes
   return { ...result, handshake, retry };
 }
 
-async function sweep() {
+/**
+ * Who the sweep serves: anyone with a Google account (Gmail is polled) or a
+ * forwarding address (mail is pushed; only the retry and Handshake steps
+ * apply). A user with neither has no mail source and is left alone.
+ */
+async function sweepUsers(): Promise<{ id: string; gmail: boolean }[]> {
   const users = await prisma.user.findMany({
-    where: { accounts: { some: { provider: "google" } } },
-    select: { id: true },
+    where: {
+      OR: [{ accounts: { some: { provider: "google" } } }, { forwardingToken: { not: null } }],
+    },
+    select: { id: true, accounts: { where: { provider: "google" }, select: { id: true }, take: 1 } },
   });
+  return users.map((u) => ({ id: u.id, gmail: u.accounts.length > 0 }));
+}
+
+async function sweep() {
+  const users = await sweepUsers();
   const mode = ingestMode();
   for (const u of users) {
-    const job = { userId: u.id, query: await queryFor(u.id), maxResults: SWEEP_MAX_RESULTS };
+    const job: IngestJob = u.gmail
+      ? { userId: u.id, query: await queryFor(u.id), maxResults: SWEEP_MAX_RESULTS, gmail: true }
+      : { userId: u.id, gmail: false };
     if (mode === "queue") {
       // Imported lazily so inline deployments never open a Redis connection.
       const { ingestQueue } = await import("@/lib/queue");
@@ -133,10 +158,14 @@ async function sweep() {
         Sentry.captureException(err);
       }
     }
-    await refreshConflicts(u.id).catch((err) => {
-      console.error("[sweep] conflict refresh failed:", err);
-      Sentry.captureException(err);
-    });
+    // Conflict badges come from Google Calendar; a forwarding-only user has
+    // none to check against, and listCalendarWindow would only return null.
+    if (u.gmail) {
+      await refreshConflicts(u.id).catch((err) => {
+        console.error("[sweep] conflict refresh failed:", err);
+        Sentry.captureException(err);
+      });
+    }
   }
   if (users.length) {
     console.log(`[sweep] ${mode === "queue" ? "enqueued ingest for" : "ingested"} ${users.length} user(s)`);

@@ -1,0 +1,28 @@
+{
+  "FromName": "NYU Tandon Career Services",
+  "MessageStream": "inbound",
+  "From": "careers@nyu.edu",
+  "FromFull": { "Email": "careers@nyu.edu", "Name": "NYU Tandon Career Services", "MailboxHash": "" },
+  "To": "Student <student@nyu.edu>",
+  "ToFull": [{ "Email": "student@nyu.edu", "Name": "Student", "MailboxHash": "" }],
+  "Cc": "",
+  "CcFull": [],
+  "Bcc": "",
+  "BccFull": [],
+  "OriginalRecipient": "lumi+0123456789abcdef0123456789abcdef@inbound.lumi.test",
+  "Subject": "Fall Tech Fair, Sept 24 at 1pm",
+  "MessageID": "73e6d360-66eb-11e1-8e72-a8904824019b",
+  "ReplyTo": "",
+  "MailboxHash": "0123456789abcdef0123456789abcdef",
+  "Date": "Tue, 15 Sep 2099 08:00:00 -0400",
+  "TextBody": "Join us for the Fall Tech Fair on Wednesday, September 24 at 1:00 PM in the\nKimmel Center, Rosenthal Pavilion. Meet 40 companies hiring for summer 2100.\n\nRSVP: https://nyu.joinhandshake.com/events/12345\n",
+  "HtmlBody": "<html><body><p>Join us for the <b>Fall Tech Fair</b> on Wednesday, September 24 at 1:00 PM in the Kimmel Center, Rosenthal Pavilion. Meet 40 companies hiring for summer 2100.</p><p><a href=\"https://nyu.joinhandshake.com/events/12345\">RSVP</a></p></body></html>",
+  "StrippedTextReply": "",
+  "Tag": "",
+  "Headers": [
+    { "Name": "Message-ID", "Value": "<newsletter-2099-09-15@lists.nyu.edu>" },
+    { "Name": "List-Unsubscribe", "Value": "<mailto:unsubscribe@lists.nyu.edu>" },
+    { "Name": "X-Forwarded-To", "Value": "lumi+0123456789abcdef0123456789abcdef@inbound.lumi.test" }
+  ],
+  "Attachments": []
+}

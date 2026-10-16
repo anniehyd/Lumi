@@ -22,13 +22,16 @@ vi.mock("@/lib/services/gmail", () => ({ MAIL_FILTER: "in:inbox" }));
 // If inline mode ever reached for the queue, this is what it would hit.
 vi.mock("@/lib/queue", () => ({ ingestQueue: () => ({ add: queueAdd }) }));
 
-import { ingestMode, queryFor, runSweep } from "@/lib/services/sweep";
+import { ingestMode, queryFor, runIngestJob, runSweep } from "@/lib/services/sweep";
 
 beforeEach(() => {
   vi.resetAllMocks();
   delete process.env.INGEST_MODE;
   db.$queryRaw.mockResolvedValue([{ "?column?": 1 }]);
-  db.user.findMany.mockResolvedValue([{ id: "u1" }, { id: "u2" }]);
+  db.user.findMany.mockResolvedValue([
+    { id: "u1", accounts: [{ id: "a1" }] },
+    { id: "u2", accounts: [{ id: "a2" }] },
+  ]);
   db.email.findFirst.mockResolvedValue(null);
   db.email.deleteMany.mockResolvedValue({ count: 0 });
   db.event.findMany.mockResolvedValue([]);
@@ -97,6 +100,59 @@ describe("runSweep — inline mode", () => {
     db.$queryRaw.mockRejectedValue(new Error("syntax error"));
     await expect(runSweep()).resolves.toEqual({ ok: false });
     expect(ingest.ingestUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("runSweep — forwarding-only users", () => {
+  // u3 never signed in with Google: no Account row, only a forwarding token.
+  beforeEach(() => {
+    db.user.findMany.mockResolvedValue([
+      { id: "u1", accounts: [{ id: "a1" }] },
+      { id: "u3", accounts: [] },
+    ]);
+  });
+
+  it("asks for everyone with a Google account or a forwarding address", async () => {
+    await runSweep();
+    expect(db.user.findMany.mock.calls[0][0].where).toEqual({
+      OR: [{ accounts: { some: { provider: "google" } } }, { forwardingToken: { not: null } }],
+    });
+  });
+
+  it("skips Gmail and the calendar for them but still runs the retry and Handshake steps", async () => {
+    await expect(runSweep()).resolves.toEqual({ ok: true });
+
+    expect(ingest.ingestUser).toHaveBeenCalledTimes(1);
+    expect(ingest.ingestUser.mock.calls[0][0]).toBe("u1");
+    expect(ingest.retryUnprocessed.mock.calls.map((c) => c[0])).toEqual(["u1", "u3"]);
+    expect(ingest.ingestHandshake.mock.calls.map((c) => c[0])).toEqual(["u1", "u3"]);
+    // refreshConflicts lists pending events per user; only the Google user gets one.
+    expect(db.event.findMany).toHaveBeenCalledTimes(1);
+    expect(db.event.findMany.mock.calls[0][0].where).toMatchObject({ userId: "u1" });
+    // No Gmail query is built for a user who has no Gmail.
+    expect(db.email.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it("enqueues their job with gmail: false", async () => {
+    process.env.INGEST_MODE = "queue";
+    await runSweep();
+    expect(queueAdd.mock.calls.map((c) => c[1])).toEqual([
+      expect.objectContaining({ userId: "u1", gmail: true, maxResults: 250 }),
+      { userId: "u3", gmail: false },
+    ]);
+  });
+});
+
+describe("runIngestJob", () => {
+  it("runs the Gmail step unless the job says there is no Gmail", async () => {
+    await runIngestJob({ userId: "u1" });
+    expect(ingest.ingestUser).toHaveBeenCalledWith("u1", { query: undefined, maxResults: undefined });
+
+    ingest.ingestUser.mockClear();
+    const result = await runIngestJob({ userId: "u3", gmail: false });
+    expect(ingest.ingestUser).not.toHaveBeenCalled();
+    expect(ingest.retryUnprocessed).toHaveBeenCalledWith("u3");
+    expect(result).toMatchObject({ fetched: 0, newEmails: 0, retry: { retried: 0, recovered: 0, eventsCreated: 0 } });
   });
 });
 

@@ -17,7 +17,13 @@ export function connection(): IORedis {
   return _connection;
 }
 
-export type IngestJob = { userId: string; query?: string; maxResults?: number };
+export type IngestJob = {
+  userId: string;
+  query?: string;
+  maxResults?: number;
+  /** False for a user with no Google account (forwarding only): skip Gmail. Default true. */
+  gmail?: boolean;
+};
 export type ReminderJob = { eventId: string; userId: string };
 
 let _ingestQueue: Queue<IngestJob> | null = null;

@@ -1,5 +1,5 @@
 import { google, gmail_v1 } from "googleapis";
-import { simpleParser } from "mailparser";
+import { simpleParser, type AddressObject, type ParsedMail } from "mailparser";
 import { getGoogleAccessToken } from "@/lib/auth";
 import { withRetry } from "@/lib/retry";
 
@@ -39,6 +39,8 @@ export type ParsedMessage = {
   icsContent?: string;
   /** Carried a List-Unsubscribe header, i.e. it is list / marketing mail. */
   listUnsubscribe: boolean;
+  /** Addresses in To/Cc/Delivered-To/X-Forwarded-To; empty when not parsed from raw. */
+  recipients?: string[];
 };
 
 async function clientFor(userId: string): Promise<gmail_v1.Gmail | null> {
@@ -85,11 +87,29 @@ export async function fetchMessage(
   const raw = res.data.raw;
   if (!raw) return null;
 
-  const buffer = Buffer.from(raw, "base64url");
-  const parsed = await simpleParser(buffer);
+  return parseRawMessage(Buffer.from(raw, "base64url"), {
+    gmailId,
+    threadId: res.data.threadId ?? "",
+    fallbackMessageId: res.data.id ?? gmailId,
+  });
+}
 
-  const messageIdHeader =
-    (parsed.messageId ?? res.data.id ?? gmailId).replace(/[<>]/g, "");
+/**
+ * Parse one RFC 5322 message into the shape the detection pipeline takes.
+ *
+ * The single parser for every way mail reaches Lumi: Gmail hands over the raw
+ * message, and the inbound-forwarding webhook (src/lib/services/inbound.ts)
+ * passes the raw message the provider relayed. Keeping one function here is
+ * what guarantees a forwarded email produces the same Email row as the same
+ * email read from Gmail.
+ */
+export async function parseRawMessage(
+  raw: Buffer | string,
+  opts: { gmailId?: string; threadId?: string; fallbackMessageId: string }
+): Promise<ParsedMessage> {
+  const parsed = await simpleParser(raw);
+
+  const messageIdHeader = (parsed.messageId ?? opts.fallbackMessageId).replace(/[<>]/g, "");
 
   const fromText =
     parsed.from?.text ?? (typeof parsed.from === "string" ? parsed.from : "");
@@ -108,8 +128,8 @@ export async function fetchMessage(
 
   return {
     messageId: messageIdHeader,
-    threadId: res.data.threadId ?? "",
-    gmailId,
+    threadId: opts.threadId ?? "",
+    gmailId: opts.gmailId ?? "",
     from: fromText,
     subject: parsed.subject ?? "",
     receivedAt: parsed.date ?? new Date(),
@@ -117,8 +137,45 @@ export async function fetchMessage(
     bodyHtml: typeof parsed.html === "string" ? parsed.html : "",
     hasIcs: !!icsContent,
     icsContent,
-    listUnsubscribe: parsed.headers.has("list-unsubscribe"),
+    listUnsubscribe: hasListUnsubscribe(parsed),
+    recipients: recipientAddresses(parsed),
   };
+}
+
+/**
+ * mailparser folds every List-* header into one `list` entry
+ * ({ unsubscribe: {...}, ... }); it is never exposed as "list-unsubscribe".
+ * Check both so the signal survives a parser upgrade either way.
+ */
+function hasListUnsubscribe(parsed: ParsedMail): boolean {
+  if (parsed.headers.has("list-unsubscribe")) return true;
+  const list = parsed.headers.get("list");
+  return typeof list === "object" && list !== null && "unsubscribe" in list;
+}
+
+/**
+ * Every address the message was addressed or delivered to: To, Cc,
+ * Delivered-To and X-Forwarded-To (which Gmail adds when a filter forwards).
+ * The inbound path reads the forwarding token out of these.
+ */
+function recipientAddresses(parsed: ParsedMail): string[] {
+  const out: string[] = [];
+  const addAddressObject = (v: AddressObject | AddressObject[] | undefined) => {
+    for (const obj of Array.isArray(v) ? v : v ? [v] : []) {
+      for (const a of obj.value) if (a.address) out.push(a.address);
+    }
+  };
+  addAddressObject(parsed.to);
+  addAddressObject(parsed.cc);
+  for (const name of ["delivered-to", "x-forwarded-to", "x-original-to"]) {
+    const v = parsed.headers.get(name);
+    const texts = Array.isArray(v) ? v : v ? [v] : [];
+    for (const t of texts) {
+      if (typeof t === "string") out.push(...t.split(",").map((s) => s.trim()).filter(Boolean));
+      else if (typeof t === "object" && "value" in t) addAddressObject(t as AddressObject);
+    }
+  }
+  return out;
 }
 
 /**
