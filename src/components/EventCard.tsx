@@ -2,237 +2,222 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import {
-  Calendar,
-  MapPin,
-  Building2,
-  Sparkles,
-  FileText,
-  Mail,
-  ChevronRight,
-  Check,
-  X,
-  CircleHelp,
-  AlertCircle,
-} from "lucide-react";
-import { useState } from "react";
-import type { MockEvent, EventStatus } from "@/lib/mock/events";
-import { getEmailById } from "@/lib/mock/events";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { MockEvent, MockEmail, EventStatus } from "@/lib/mock/events";
+import { summaryFor } from "@/lib/brief";
 
 type Props = {
   event: MockEvent;
+  index: number;
   focused?: boolean;
   onAction: (id: string, status: EventStatus) => void;
 };
 
-const kindLabels: Record<MockEvent["kind"], { label: string; tone: string }> = {
-  MEETING: { label: "Meeting", tone: "text-lumi-blue" },
-  INFO_SESSION: { label: "Info Session", tone: "text-lumi-accent" },
-  DEADLINE: { label: "Deadline", tone: "text-lumi-rose" },
-  COFFEE_CHAT: { label: "Coffee Chat", tone: "text-lumi-green" },
-};
-
-const detectionLabels: Record<MockEvent["detectedVia"], string> = {
-  ICS: "Calendar attachment",
-  SCHEMA_ORG: "Structured markup",
-  KEYWORD: "Keyword match",
-  LLM: "AI extraction",
-};
-
-function formatWhen(startISO: string, endISO?: string): string {
-  const start = new Date(startISO);
-  const dateStr = start.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const startTime = start.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  if (!endISO) return `${dateStr} · ${startTime}`;
-  const end = new Date(endISO);
-  const endTime = end.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${dateStr} · ${startTime}–${endTime}`;
+async function fetchEmail(id: string): Promise<MockEmail | null> {
+  const res = await fetch(`/api/emails/${id}`);
+  if (!res.ok) return null;
+  return ((await res.json()).email as MockEmail) ?? null;
 }
 
-export function EventCard({ event, focused, onAction }: Props) {
+function dayLabel(startISO: string, endISO?: string): string {
+  const start = new Date(startISO);
+  const day = start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const t = (d: Date) =>
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: d.getMinutes() ? "2-digit" : undefined }).replace(" ", " ");
+  if (!endISO) return `${day} · ${t(start)}`;
+  return `${day} · ${t(start)}–${t(new Date(endISO))}`;
+}
+
+function matchLabel(relevance: number): { text: string; tone: "mark" | "plain" | "faint" } {
+  if (relevance >= 4) return { text: "Strong match", tone: "mark" };
+  if (relevance === 3) return { text: "Fair match", tone: "plain" };
+  return { text: "Outside your lane", tone: "faint" };
+}
+
+const pillTone = {
+  mark: "bg-lumi-mark text-lumi-text",
+  plain: "bg-lumi-surface text-lumi-text",
+  faint: "bg-lumi-surface text-lumi-muted",
+  ink: "bg-lumi-text text-white",
+  rose: "bg-[#FFE4E4] text-lumi-rose",
+};
+
+function Pill({ tone, children }: { tone: keyof typeof pillTone; children: React.ReactNode }) {
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-[13px] font-semibold transition-transform hover:-rotate-3 hover:scale-105 ${pillTone[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * One row of the decision list. The row leads with a plain-English sentence
+ * ("Looks like …") rather than the raw title, because that sentence is what a
+ * person actually needs to decide; the title and the source paragraph are
+ * there when they want to check.
+ */
+export function EventCard({ event, index, focused, onAction }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const email = getEmailById(event.sourceEmailId);
-  const kind = kindLabels[event.kind];
-  const isLowConfidence = event.confidence < 0.9 && event.detectedVia !== "ICS";
+  const { data: email } = useQuery({
+    queryKey: ["email", event.sourceEmailId],
+    queryFn: () => fetchEmail(event.sourceEmailId),
+    enabled: expanded && Boolean(event.sourceEmailId),
+    staleTime: Infinity,
+  });
+
+  // The focused row opens its source so the keyboard flow never needs the mouse.
+  useEffect(() => {
+    if (focused) setExpanded(true);
+  }, [focused]);
+
+  const relevance = event.relevance ?? 3;
+  const match = matchLabel(relevance);
+  const unsure = event.confidence < 0.7 && event.detectedVia !== "ICS";
+  const deadline = event.kind === "DEADLINE";
+  const primaryLabel = deadline ? "Remind me" : "Attend";
+  const summary = event.summary ?? summaryFor(event);
+  const host = event.organizerCompany ?? event.organizerName;
+  const lead = focused || index === 0;
 
   return (
     <motion.article
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: 40 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className={`group relative rounded-xl border bg-lumi-surface transition-all ${
-        focused
-          ? "border-lumi-accent shadow-[0_0_0_3px_rgba(232,160,78,0.12)]"
-          : "border-lumi-border hover:border-lumi-subtle"
+      exit={{ opacity: 0, x: 40, transition: { duration: 0.18 } }}
+      style={{ animationDelay: `${Math.min(index, 6) * 90 + 380}ms` }}
+      className={`animate-rise group -mx-6 grid grid-cols-1 sm:grid-cols-[96px_1fr_auto] gap-y-4 sm:gap-7 items-start rounded-[20px] px-6 py-8 sm:py-9 border-t border-lumi-border transition-[background-color,transform] duration-300 hover:bg-[#FAFAF7] hover:translate-x-1 ${
+        focused ? "bg-[#FAFAF7]" : ""
       }`}
     >
-      {/* Kind stripe + relevance stars + confidence chip */}
-      <div className="flex items-center justify-between px-5 pt-4">
-        <div className={`flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider ${kind.tone}`}>
-          <Sparkles className="w-3 h-3" />
-          <span>{kind.label}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          {isLowConfidence && (
-            <div className="flex items-center gap-1 text-[11px] text-lumi-muted">
-              <AlertCircle className="w-3 h-3" />
-              <span>{Math.round(event.confidence * 100)}% — verify</span>
-            </div>
-          )}
-          <RelevanceStars value={event.relevance ?? 3} />
-        </div>
+      <div
+        aria-hidden="true"
+        className={`font-serif font-serif-soft text-[40px] sm:text-[64px] font-light leading-[0.9] tracking-[-0.04em] -mb-1 sm:mb-0 transition-[color,transform] duration-300 group-hover:text-lumi-accent group-hover:-translate-y-1 group-hover:-rotate-6 ${
+          focused ? "text-lumi-accent" : "text-[#C9C7C1]"
+        }`}
+      >
+        {String(index + 1).padStart(2, "0")}
       </div>
 
-      <div className="px-5 pt-2 pb-5">
-        {/* Title */}
-        <Link
-          href={`/events/${event.id}`}
-          className="group/title inline-block"
-        >
-          <h2 className="font-serif text-2xl leading-tight text-lumi-text group-hover/title:text-lumi-accent transition-colors">
+      <div className="min-w-0 flex flex-col gap-3.5">
+        <div className="flex flex-wrap gap-2.5">
+          <Pill tone="ink">{dayLabel(event.startTime, event.endTime)}</Pill>
+          {deadline ? <Pill tone="plain">Deadline</Pill> : <Pill tone={match.tone}>{match.text}</Pill>}
+          {event.conflictTitle && <Pill tone="rose">Overlaps {event.conflictTitle}</Pill>}
+          {unsure && <Pill tone="faint">Not sure it’s an event</Pill>}
+        </div>
+
+        <Link href={`/events/${event.id}`} className="inline-block">
+          <h2
+            className={`font-serif font-medium leading-[1.06] tracking-[-0.025em] text-lumi-text transition-colors hover:text-lumi-accent ${
+              lead ? "text-[34px] sm:text-[44px]" : "text-[28px] sm:text-[34px]"
+            }`}
+          >
             {event.title}
           </h2>
         </Link>
 
-        {/* Calendar conflict — informational only; the decision stays with you */}
-        {event.conflictTitle && (
-          <div className="mt-2 flex items-center gap-1.5 rounded-md bg-lumi-rose/10 px-2.5 py-1.5 text-xs text-lumi-rose">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>
-              Overlaps with <span className="font-medium">“{event.conflictTitle}”</span> on your calendar
-            </span>
-          </div>
-        )}
-
-        {/* Meta lines */}
-        <div className="mt-3 space-y-1.5 text-sm text-lumi-muted">
-          <MetaRow icon={<Calendar className="w-4 h-4" />}>
-            {formatWhen(event.startTime, event.endTime)}
-          </MetaRow>
-          {event.locationName && (
-            <MetaRow icon={<MapPin className="w-4 h-4" />}>
-              <span className="text-lumi-text">{event.locationName}</span>
-              {event.locationAddress && (
-                <span className="text-lumi-subtle"> · {event.locationAddress}</span>
-              )}
-            </MetaRow>
-          )}
-          {event.organizerCompany && (
-            <MetaRow icon={<Building2 className="w-4 h-4" />}>
-              Hosted by{" "}
-              <span className="text-lumi-text">{event.organizerCompany}</span>
-              {event.organizerName && (
-                <span className="text-lumi-subtle"> via {event.organizerName}</span>
-              )}
-            </MetaRow>
-          )}
-        </div>
-
-        {/* Description */}
-        <p className="mt-4 text-sm leading-relaxed text-lumi-muted line-clamp-2">
-          {event.description}
+        <p className={`text-lumi-text leading-relaxed ${lead ? "text-[17px]" : "text-base"}`}>
+          <em className="font-serif font-serif-soft text-[1.12em]">Looks like</em>{" "}
+          {summary.replace(/^looks like\s*/i, "")}
         </p>
 
-        {/* Source row */}
-        {email && (
+        {(event.locationName || host) && (
+          <p className="text-sm text-lumi-muted">
+            {[event.locationName, host && `hosted by ${host}`].filter(Boolean).join(" · ")}
+          </p>
+        )}
+
+        {event.sourceEmailId && !expanded && (
           <button
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-3 flex items-center gap-1.5 text-xs text-lumi-subtle hover:text-lumi-muted transition-colors"
+            onClick={() => setExpanded(true)}
+            className="self-start text-[13px] font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
           >
-            <Mail className="w-3 h-3" />
-            <span>
-              From <span className="text-lumi-muted">{email.fromName}</span> ·{" "}
-              {detectionLabels[event.detectedVia]}
-            </span>
-            <ChevronRight
-              className={`w-3 h-3 transition-transform ${expanded ? "rotate-90" : ""}`}
-            />
+            Show where this came from
           </button>
         )}
 
         {expanded && email && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-3 overflow-hidden"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-1 rounded-2xl bg-lumi-surface px-5 py-5 flex flex-col gap-2.5"
           >
-            <div className="rounded-lg border border-lumi-border bg-lumi-bg p-3">
-              <div className="flex items-center gap-2 text-xs text-lumi-subtle mb-2">
-                <FileText className="w-3 h-3" />
-                <span className="font-mono truncate">{email.subject}</span>
-              </div>
-              <p className="text-xs leading-relaxed text-lumi-muted whitespace-pre-wrap max-h-40 overflow-y-auto">
-                {email.bodyText}
-              </p>
+            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-[13px] text-lumi-muted">
+              <span className="font-semibold text-lumi-text">From {email.fromName}</span>
+              <span>
+                “{email.subject}” ·{" "}
+                {new Date(email.receivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              </span>
             </div>
+            <p className="font-serif font-serif-soft text-[15px] leading-[1.6] text-[#3A3A3A] line-clamp-4 whitespace-pre-line">
+              {excerptFor(email.bodyText, event.title)}
+            </p>
+            <Link
+              href={`/events/${event.id}`}
+              className="self-start text-[13px] font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
+            >
+              Open the whole email
+            </Link>
           </motion.div>
         )}
+      </div>
 
-        {/* Actions */}
-        <div className="mt-5 flex items-center gap-2">
-          <button
-            onClick={() => onAction(event.id, "DECLINED")}
-            className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text hover:border-lumi-subtle transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-            Decline
-          </button>
-          <button
-            onClick={() => onAction(event.id, "MAYBE")}
-            className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text hover:border-lumi-subtle transition-colors"
-          >
-            <CircleHelp className="w-3.5 h-3.5" />
-            Maybe
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={() => onAction(event.id, "ACCEPTED")}
-            className="flex items-center gap-1.5 rounded-lg bg-lumi-accent px-4 py-2 text-xs font-semibold text-lumi-bg hover:bg-lumi-accent-hover transition-colors"
-          >
-            <Check className="w-3.5 h-3.5" />
-            Attend
-          </button>
-        </div>
+      <div className="flex sm:flex-col flex-wrap gap-2 sm:min-w-[132px]">
+        <button
+          onClick={() => onAction(event.id, "ACCEPTED")}
+          data-cursor={deadline ? "set a reminder" : "attend?"}
+          data-cursor-tone={deadline ? "blue" : "mark"}
+          className={`min-h-[46px] rounded-full px-5 text-sm font-semibold transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_10px_24px_-14px_rgba(17,17,17,0.45)] active:scale-[0.98] ${
+            lead
+              ? "bg-lumi-text text-white"
+              : "border-[1.5px] border-lumi-text bg-white text-lumi-text"
+          }`}
+        >
+          {primaryLabel}
+          {lead && " →"}
+        </button>
+        <button
+          onClick={() => onAction(event.id, "MAYBE")}
+          data-cursor="maybe later"
+          data-cursor-tone="ink"
+          className="min-h-[44px] rounded-full bg-lumi-surface px-5 text-sm font-semibold text-lumi-text transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.03] active:scale-[0.98]"
+        >
+          Maybe
+        </button>
+        <button
+          onClick={() => onAction(event.id, "DECLINED")}
+          data-cursor="skip this one"
+          data-cursor-tone="ink"
+          className="min-h-[44px] rounded-full px-4 text-sm font-semibold text-lumi-muted transition-colors hover:text-lumi-text"
+        >
+          Skip
+        </button>
       </div>
     </motion.article>
   );
 }
 
-function RelevanceStars({ value }: { value: number }) {
-  const v = Math.min(5, Math.max(1, Math.round(value)));
-  return (
-    <div
-      className="flex items-center gap-0.5 text-[13px] leading-none"
-      title={`Relevance: ${v}/5 for your interests`}
-      aria-label={`Relevance ${v} out of 5`}
-    >
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} className={i <= v ? "text-lumi-accent" : "text-lumi-subtle/50"}>
-          ★
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function MetaRow({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="text-lumi-subtle mt-0.5">{icon}</span>
-      <span className="flex-1">{children}</span>
-    </div>
-  );
+/**
+ * The paragraph of the email that mentions this event, so the panel reads as
+ * "here is the line Lumi found" rather than a wall of newsletter.
+ */
+function excerptFor(body: string, title: string): string {
+  const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const words = title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 3);
+  let best = paragraphs[0] ?? body;
+  let bestScore = 0;
+  for (const p of paragraphs) {
+    const lower = p.toLowerCase();
+    const score = words.filter((w) => lower.includes(w)).length;
+    if (score > bestScore) {
+      best = p;
+      bestScore = score;
+    }
+  }
+  return best.length > 420 ? best.slice(0, 417).trimEnd() + "…" : best;
 }

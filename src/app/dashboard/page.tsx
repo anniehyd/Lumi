@@ -1,12 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { EventFeed } from "@/components/EventFeed";
-import { MiniCalendar } from "@/components/MiniCalendar";
+import { EventFeed, pendingOf } from "@/components/EventFeed";
 import { Nav } from "@/components/Nav";
 import { MissReport } from "@/components/MissReport";
+import { StarCursor } from "@/components/StarCursor";
 import type { MockEvent } from "@/lib/mock/events";
-import { Activity, Database, MailCheck } from "lucide-react";
 
 async function fetchEvents(): Promise<MockEvent[]> {
   const res = await fetch("/api/events?limit=200");
@@ -29,6 +28,11 @@ async function fetchSyncStatus(): Promise<SyncStatus> {
   return (await res.json()) as SyncStatus;
 }
 
+/**
+ * The one page that matters: a sentence about the week, then the list of
+ * things to decide. No sidebar, no system panel; the numbers that used to
+ * live there are one quiet line at the bottom.
+ */
 export default function Dashboard() {
   const { data: events = [] } = useQuery({
     queryKey: ["events"],
@@ -41,134 +45,56 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
-  const acceptedCount = events.filter((e) => e.status === "ACCEPTED").length;
-  const pendingCount = events.filter((e) => e.status === "PENDING").length;
-  const eventDates = events.map((e) => e.startTime);
+  const pending = pendingOf(events);
+  const now = Date.now();
+  const onCalendar = events.filter(
+    (e) => e.status === "ACCEPTED" && new Date(e.startTime).getTime() > now
+  ).length;
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Nav />
+    <div className="lumi-custom-cursor min-h-screen flex flex-col bg-lumi-bg">
+      <StarCursor />
+      <Nav pendingCount={pending.length} />
 
-      <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 h-[calc(100vh-100px)]">
-          <EventFeed />
+      <main className="flex-1 w-full max-w-[1040px] mx-auto px-6 sm:px-10 pt-10 sm:pt-16 pb-24 flex flex-col gap-16">
+        <EventFeed lastScan={syncStatus?.lastIngest} />
 
-          <aside className="hidden lg:flex flex-col gap-4">
-            <MiniCalendar eventDates={eventDates} />
-
-            <div className="rounded-xl border border-lumi-border bg-lumi-surface p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-lumi-muted mb-3">
-                This Month
-              </h3>
-              <div className="space-y-2">
-                <StatRow label="Attending" value={acceptedCount} color="text-lumi-green" />
-                <StatRow label="Pending" value={pendingCount} color="text-lumi-accent" />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-lumi-border bg-lumi-surface p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-lumi-muted mb-3">
-                System
-              </h3>
-              <div className="space-y-2">
-                <StatusRow
-                  icon={<Database className="w-3.5 h-3.5" />}
-                  label="Source"
-                  value={syncStatus?.source === "db" ? "Database" : "Demo data"}
-                  tone={syncStatus?.dbConnected ? "text-lumi-green" : "text-lumi-accent"}
-                />
-                <StatusRow
-                  icon={<MailCheck className="w-3.5 h-3.5" />}
-                  label="Events"
-                  value={String(syncStatus?.eventCount ?? events.length)}
-                />
-                <StatusRow
-                  icon={<Activity className="w-3.5 h-3.5" />}
-                  label="Last scan"
-                  value={formatLastIngest(syncStatus?.lastIngest)}
-                />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-lumi-border bg-lumi-surface p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-lumi-muted mb-3">
-                Shortcuts
-              </h3>
-              <div className="space-y-2 text-xs text-lumi-muted">
-                <Shortcut label="Navigate" keys={["J", "K"]} />
-                <Shortcut label="Attend" keys={["A"]} />
-                <Shortcut label="Maybe" keys={["M"]} />
-                <Shortcut label="Decline" keys={["D"]} />
-              </div>
-            </div>
-
-            {/* Recall signal — the only place a user can tell us about an
-                event we never surfaced at all. */}
-            <div className="pt-1">
+        <footer className="flex flex-wrap items-end justify-between gap-8">
+          <div className="max-w-[26ch] font-serif font-serif-soft text-[26px] sm:text-[30px] leading-[1.2] tracking-[-0.02em] text-lumi-text">
+            Nothing lands on your calendar until you say so.{" "}
+            <span className="italic">
               <MissReport />
+            </span>
+          </div>
+          <dl className="flex gap-9 text-sm text-lumi-muted">
+            <div className="group/stat transition-transform hover:-translate-y-0.5">
+              <dt className="sr-only">On your calendar</dt>
+              <dd className="font-serif text-[40px] font-light leading-none text-lumi-text">{onCalendar}</dd>
+              <dd>on your calendar</dd>
             </div>
-          </aside>
-        </div>
+            <div className="group/stat transition-transform hover:-translate-y-0.5">
+              <dt className="sr-only">Source</dt>
+              <dd className="font-serif text-[40px] font-light leading-none text-lumi-accent">
+                {syncStatus?.source === "db" ? "live" : "demo"}
+              </dd>
+              <dd>{syncStatus?.source === "db" ? "your inbox" : "sample data"}</dd>
+            </div>
+          </dl>
+        </footer>
+
+        <p className="text-xs text-lumi-subtle">
+          Keyboard: <Kbd>J</Kbd> <Kbd>K</Kbd> move · <Kbd>A</Kbd> attend · <Kbd>M</Kbd> maybe ·{" "}
+          <Kbd>D</Kbd> skip
+        </p>
       </main>
     </div>
   );
 }
 
-function StatusRow({
-  icon,
-  label,
-  value,
-  tone = "text-lumi-text",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone?: string;
-}) {
+function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-xs">
-      <span className="flex items-center gap-1.5 text-lumi-muted">
-        <span className="text-lumi-subtle">{icon}</span>
-        {label}
-      </span>
-      <span className={`truncate ${tone}`}>{value}</span>
-    </div>
-  );
-}
-
-function formatLastIngest(iso?: string | null): string {
-  if (!iso) return "None yet";
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function StatRow({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm text-lumi-muted">{label}</span>
-      <span className={`text-sm font-semibold ${color}`}>{value}</span>
-    </div>
-  );
-}
-
-function Shortcut({ label, keys }: { label: string; keys: string[] }) {
-  return (
-    <div className="flex justify-between items-center">
-      <span>{label}</span>
-      <span className="flex gap-1">
-        {keys.map((k) => (
-          <kbd
-            key={k}
-            className="px-1.5 py-0.5 rounded bg-lumi-bg border border-lumi-border font-mono text-[10px] text-lumi-text"
-          >
-            {k}
-          </kbd>
-        ))}
-      </span>
-    </div>
+    <kbd className="rounded border border-lumi-border bg-white px-1.5 py-0.5 font-sans text-[11px] text-lumi-text">
+      {children}
+    </kbd>
   );
 }

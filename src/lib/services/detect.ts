@@ -17,6 +17,7 @@ import {
 import { extractEventsDetailed, activeModel, activePromptVersion, clampRelevance } from "@/lib/services/extract";
 import { normalizeProfile } from "@/lib/profile";
 import type { ExtractedEvent } from "@/lib/detection/types";
+import { summaryFor } from "@/lib/brief";
 
 export type PipelineMessage = {
   bodyText: string;
@@ -266,6 +267,9 @@ export async function persistEvents(
         rsvpDeadline: parseDate(e.rsvpDeadline),
         attire: e.attire ?? null,
         relevance: clampRelevance(e.relevance),
+        // The model's sentence when it wrote one; a template for parser and
+        // feed tiers so the card never shows an empty line.
+        summary: e.summary ?? summaryFor({ ...e, startTime: start.toISOString() }),
         conflictTitle,
         dedupHash: dedup,
       },

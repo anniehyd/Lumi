@@ -178,6 +178,10 @@ model Event {
   // Core fields
   title       String
   description String?   @db.Text
+  // One plain sentence for the card, "Looks like …": who is doing what, for
+  // whom. Written by the model in the extraction call; the parser tiers and
+  // the Handshake feed get a templated one (src/lib/brief.ts summaryFor).
+  summary     String?   @db.Text
   date        String // ISO date: 2026-03-28
   startTime   DateTime // Full ISO 8601 with offset
   endTime     DateTime?

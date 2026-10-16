@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Loader2, MailQuestion, X } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 
 /**
  * The recall control. Accept/decline tells us whether what Lumi surfaced was
@@ -39,10 +39,11 @@ export function MissReport() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-xs text-lumi-subtle hover:text-lumi-muted transition-colors"
+        data-cursor="tell Lumi"
+        data-cursor-tone="blue"
+        className="text-lumi-accent underline decoration-2 underline-offset-[5px] transition-colors hover:text-lumi-text"
       >
-        <MailQuestion className="w-3.5 h-3.5" />
-        Lumi missed something
+        Did it miss something?
       </button>
 
       <AnimatePresence>

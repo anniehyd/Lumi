@@ -124,8 +124,13 @@ const TOOL_SCHEMA = {
             description:
               "How relevant this event is to the user's interests, 1 (barely) to 5 (perfect fit). Follow the relevance rubric in the system prompt.",
           },
+          summary: {
+            type: "string" as const,
+            description:
+              "One plain sentence that starts with \"Looks like\" and says who is doing what, for whom, in the user's own terms. Example: \"Looks like Wasserman is bringing Marshall Wace developers in for a coffee chat, aimed at students recruiting for tech.\" No marketing voice.",
+          },
         },
-        required: ["title", "startTime", "timezone", "confidence", "kind", "description", "relevance"],
+        required: ["title", "startTime", "timezone", "confidence", "kind", "description", "relevance", "summary"],
       },
     },
   },
@@ -156,7 +161,8 @@ Rules:
 - Job postings, general announcements without a time, and unsubscribe footers are NOT events.
 - If no events, return an empty array.
 - Always infer a timezone. Default to the sender's likely timezone (e.g. US universities → America/New_York).
-- Confidence: 1.0 = explicit date + location + RSVP; 0.8 = date + title; <0.7 = ambiguous.`;
+- Confidence: 1.0 = explicit date + location + RSVP; 0.8 = date + title; <0.7 = ambiguous.
+- summary: one friendly sentence starting "Looks like", as if a sharp friend skimmed the email for the user. Mention the host and who it is for. Under 30 words.`;
 
 const LINK_RULE = `- Links in the email are shown as placeholders like [L1], [L2]. When an event
   has an RSVP or registration link, return its placeholder exactly as written
@@ -399,7 +405,16 @@ export function normalizeEvents(payload: unknown, links: string[] = []): Extract
     confidence: clampConfidence(e.confidence),
     kind: KINDS.includes(e.kind as ExtractedEvent["kind"]) ? (e.kind as ExtractedEvent["kind"]) : "MEETING",
     relevance: clampRelevance(e.relevance),
+    summary: cleanSummary(e.summary),
   }));
+}
+
+/** A one-liner the card can show as-is, or undefined so the template fills in. */
+export function cleanSummary(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length < 12 || text.length > 240) return undefined;
+  return text;
 }
 
 /** Extraction plus what it cost — the pipeline uses this to feed the metrics. */

@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,0..100;1,9..144,300..700,0..100&family=Bricolage+Grotesque:opsz,wght@12..96,400..700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,16 +6,23 @@
 
 html,
 body {
-  background-color: #FAF7F1;
-  color: #2B2620;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  background-color: #FFFFFF;
+  color: #111111;
+  font-family: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Fraunces is a variable font: soften the display cuts, keep the body crisp. */
+.font-serif {
+  font-variation-settings: "SOFT" 60, "opsz" 144;
+}
+.font-serif-soft {
+  font-variation-settings: "SOFT" 100, "opsz" 144;
+}
+
 ::selection {
-  background: rgba(217, 130, 31, 0.25);
-  color: #2B2620;
+  background: rgba(245, 230, 99, 0.7);
+  color: #111111;
 }
 
 /* Scrollbar — slim, unobtrusive */
@@ -25,7 +32,13 @@ body {
 }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #D8D1C4;
+  background: #DDDBD5;
   border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover { background: #C4BBA9; }
+::-webkit-scrollbar-thumb:hover { background: #C9C7C1; }
+
+/* The dashboard draws its own cursor; keep the native one for touch and
+   for anyone who asked for less motion. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .lumi-custom-cursor, .lumi-custom-cursor * { cursor: none !important; }
+}
