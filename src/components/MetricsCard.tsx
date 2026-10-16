@@ -20,13 +20,13 @@ export function MetricsCard() {
     retry: false,
   });
 
-  if (isLoading) return <p className="px-4 py-3 text-xs text-lumi-muted">Loading…</p>;
+  if (isLoading) return <p className="py-5 text-sm text-lumi-muted">Loading…</p>;
   if (isError || !data) {
-    return <p className="px-4 py-3 text-xs text-lumi-muted">Sign in to see your numbers.</p>;
+    return <p className="py-5 text-sm text-lumi-muted">Sign in to see your numbers.</p>;
   }
   if (!data.hasData) {
     return (
-      <p className="px-4 py-3 text-xs text-lumi-muted">
+      <p className="py-5 text-sm text-lumi-muted">
         No activity recorded in the last 7 days. Numbers appear after the next inbox sweep.
       </p>
     );
@@ -43,12 +43,12 @@ export function MetricsCard() {
   ];
 
   return (
-    <dl className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-lumi-border">
+    <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-5">
       {cells.map(([label, value, sub]) => (
-        <div key={label} className="bg-lumi-surface px-4 py-3">
+        <div key={label} className="rounded-2xl bg-lumi-surface px-4 py-4">
           <dt className="text-xs text-lumi-muted">{label}</dt>
-          <dd className="text-lg text-lumi-text tabular-nums">{value}</dd>
-          <dd className="text-[11px] text-lumi-subtle">{sub}</dd>
+          <dd className="font-serif text-[30px] font-light leading-none text-lumi-text tabular-nums mt-1">{value}</dd>
+          <dd className="text-xs text-lumi-subtle mt-1">{sub}</dd>
         </div>
       ))}
     </dl>

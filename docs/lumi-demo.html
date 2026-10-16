@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lumi Today</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,0..100;1,9..144,300..700,0..100&family=Bricolage+Grotesque:opsz,wght@12..96,400..700&display=swap">
+<style>
+  /* Layout: one 1040px column. A sentence about the week, then a ranked list of rows; no sidebar. */
+  :root {
+    --bg: #FFFFFF;
+    --ink: #111111;
+    --muted: #6B6B6B;
+    --faint: #9A9890;
+    --line: #E6E4DF;
+    --panel: #F6F5F2;
+    --panel-hover: #FAFAF7;
+    --accent: #2B4BFF;
+    --mark: #F5E663;
+    --rose-bg: #FFE4E4;
+    --rose: #9A2E2E;
+    --blue-bg: #DCE3FF;
+    --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --ui: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--ui);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(245, 230, 99, .7); color: var(--ink); }
+  a { color: var(--accent); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .serif { font-family: var(--display); font-variation-settings: "SOFT" 60, "opsz" 144; }
+  .serif-soft { font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 144; }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    body.has-cursor, body.has-cursor * { cursor: none !important; }
+  }
+
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  @media (min-width: 720px) {
+    .wrap { padding-left: max(40px, env(safe-area-inset-left, 0px)); padding-right: max(40px, env(safe-area-inset-right, 0px)); }
+  }
+
+  /* Header */
+  header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: rgba(255,255,255,.85); backdrop-filter: blur(14px); }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-block: 20px; max-width: 1180px; }
+  .wordmark { font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 144; font-weight: 600; font-size: 26px; letter-spacing: -.02em; color: var(--ink); text-decoration: none; }
+  .wordmark b { color: var(--accent); font-weight: inherit; }
+  nav { display: flex; gap: 24px; font-size: 14px; font-weight: 500; }
+  nav a { color: var(--muted); text-decoration: none; }
+  nav a[aria-current] { color: var(--ink); }
+  .pill-count { border-radius: 999px; background: var(--ink); color: #fff; padding: 9px 16px; font-size: 14px; font-weight: 600; transition: opacity .2s; }
+  .pill-count[hidden] { display: none; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .bar-right { display: flex; align-items: center; gap: 12px; }
+
+  main { padding-block: 40px 96px; display: flex; flex-direction: column; gap: 56px; }
+  @media (min-width: 720px) { main { padding-top: 64px; gap: 64px; } }
+
+  /* Hero */
+  .hero { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; }
+  .date { margin: 0; display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+  .date::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  h1 { margin: 0; font-weight: 400; font-size: clamp(44px, 9vw, 84px); line-height: .98; letter-spacing: -.03em; max-width: 13ch; text-wrap: balance; }
+  h1 .hl { position: relative; display: inline-block; font-style: italic; font-weight: 500; }
+  h1 .hl i { position: absolute; left: -.05em; right: -.07em; bottom: .12em; height: 34%; border-radius: 4px; background: var(--mark); transform-origin: left center; z-index: 0; }
+  h1 .hl span { position: relative; z-index: 1; }
+  .sub { margin: 0; font-size: 18px; line-height: 1.45; color: #4A4A4A; max-width: 42ch; }
+  @media (min-width: 720px) { .sub { font-size: 20px; } }
+
+  /* Rows */
+  .list { display: flex; flex-direction: column; border-bottom: 1px solid var(--line); }
+  .row {
+    display: grid; grid-template-columns: 1fr; gap: 16px 28px; align-items: start;
+    margin: 0 -16px; padding: 32px 16px; border-top: 1px solid var(--line); border-radius: 20px;
+    transition: background-color .25s ease, transform .25s ease, opacity .25s ease;
+  }
+  @media (min-width: 720px) {
+    .row { grid-template-columns: 96px 1fr auto; margin: 0 -24px; padding: 36px 24px; }
+  }
+  .row:hover, .row.focused { background: var(--panel-hover); }
+  .row:hover { transform: translateX(4px); }
+  .row.leaving { opacity: 0; transform: translateX(40px); }
+  .num { font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 144; font-weight: 300; font-size: 40px; line-height: .9; letter-spacing: -.04em; color: #C9C7C1; font-variant-numeric: tabular-nums; transition: color .3s, transform .3s cubic-bezier(.2,.7,.2,1); }
+  @media (min-width: 720px) { .num { font-size: 64px; } }
+  .row:hover .num, .row.focused .num { color: var(--accent); }
+  .row:hover .num { transform: translateY(-4px) rotate(-6deg); }
+  .body { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 10px; }
+  .pill { border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; transition: transform .2s cubic-bezier(.2,.7,.2,1); }
+  .pill:hover { transform: rotate(-3deg) scale(1.05); }
+  .pill.ink { background: var(--ink); color: #fff; }
+  .pill.mark { background: var(--mark); color: var(--ink); }
+  .pill.plain { background: var(--panel); color: var(--ink); }
+  .pill.faint { background: var(--panel); color: var(--muted); }
+  .pill.rose { background: var(--rose-bg); color: var(--rose); }
+  .pill.blue { background: var(--blue-bg); color: var(--accent); }
+  h2 { margin: 0; font-weight: 500; font-size: 28px; line-height: 1.06; letter-spacing: -.025em; text-wrap: balance; }
+  .row.lead h2 { font-size: 34px; }
+  @media (min-width: 720px) { h2 { font-size: 34px; } .row.lead h2 { font-size: 44px; } }
+  .looks { margin: 0; font-size: 16px; line-height: 1.5; }
+  .row.lead .looks { font-size: 17px; }
+  .looks em { font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 144; font-style: italic; font-size: 1.12em; }
+  .where { margin: 0; font-size: 14px; color: var(--muted); }
+  .src-toggle { align-self: flex-start; background: none; border: 0; padding: 0; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .src-toggle:hover { color: var(--ink); }
+  .source { border-radius: 16px; background: var(--panel); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .source .meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+  .source .meta b { color: var(--ink); font-weight: 600; }
+  .source p { margin: 0; font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 14; font-size: 15px; line-height: 1.6; color: #3A3A3A; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  @media (min-width: 720px) { .actions { flex-direction: column; min-width: 132px; } }
+  .btn { min-height: 44px; border-radius: 999px; padding: 0 20px; font-size: 14px; font-weight: 600; border: 0; background: var(--panel); color: var(--ink); transition: transform .18s cubic-bezier(.2,.7,.2,1), box-shadow .18s, background-color .18s; }
+  .btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 10px 24px -14px rgba(17,17,17,.45); }
+  .btn:active { transform: translateY(0) scale(.98); }
+  .btn.primary { min-height: 46px; background: var(--ink); color: #fff; }
+  .btn.outline { background: #fff; border: 1.5px solid var(--ink); }
+  .btn.ghost { background: transparent; color: var(--muted); padding: 0 14px; }
+  .btn.ghost:hover { color: var(--ink); box-shadow: none; transform: none; }
+
+  /* Footer */
+  .foot { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 32px; }
+  .foot .line { max-width: 26ch; font-size: 26px; line-height: 1.2; letter-spacing: -.02em; }
+  @media (min-width: 720px) { .foot .line { font-size: 30px; } }
+  .foot .line a { font-style: italic; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+  .stats { display: flex; gap: 36px; font-size: 14px; color: var(--muted); margin: 0; }
+  .stats div { transition: transform .25s; }
+  .stats div:hover { transform: translateY(-3px); }
+  .stats dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .stats dd { margin: 0; }
+  .stats .n { font-family: var(--display); font-weight: 300; font-size: 40px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stats .n.acc { color: var(--accent); }
+  .keys { font-size: 12px; color: var(--faint); margin: 0; }
+  kbd { font-family: var(--ui); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; background: #fff; padding: 1px 6px; color: var(--ink); }
+  .note { font-size: 12px; color: var(--faint); margin: 0; }
+
+  .empty { padding: 48px 0; display: flex; flex-direction: column; gap: 10px; }
+  .empty p { margin: 0; color: var(--muted); max-width: 44ch; }
+
+  /* Toast */
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 40; background: var(--ink); color: #fff; border-radius: 999px; padding: 12px 10px 12px 18px; font-size: 14px; display: flex; align-items: center; gap: 14px; box-shadow: 0 16px 40px -18px rgba(0,0,0,.5); transition: transform .25s cubic-bezier(.2,.7,.2,1), opacity .25s; max-width: calc(100vw - 32px); }
+  .toast.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+  .toast button { background: rgba(255,255,255,.14); border: 0; color: #fff; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
+
+  /* Cursor */
+  .cur-blob, .cur-star { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 60; opacity: 0; will-change: transform; }
+  .cur-blob { width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: var(--mark); mix-blend-mode: multiply; transition: width .3s, height .3s, margin .3s, background-color .3s, opacity .3s, transform .22s cubic-bezier(.2,.7,.2,1); }
+  .cur-blob.hot { width: 104px; height: 104px; margin: -52px 0 0 -52px; }
+  .cur-star { z-index: 61; transition: opacity .2s, transform .06s linear; }
+  .cur-star svg { display: block; margin: -13px 0 0 -13px; color: var(--accent); animation: spin 6s linear infinite; transition: color .3s; }
+  .cur-star .tag { position: absolute; left: 18px; top: 10px; white-space: nowrap; background: var(--ink); color: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; }
+  .cur-star.hot .tag { opacity: 1; transform: translateY(0); }
+
+  /* Motion */
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes mark { from { transform: scaleX(0) rotate(-1.2deg); } to { transform: scaleX(1) rotate(-1.2deg); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .rise { animation: rise .7s cubic-bezier(.2,.7,.2,1) backwards; }
+  h1 .hl i { animation: mark .6s cubic-bezier(.2,.7,.2,1) .55s backwards; }
+  @media (prefers-reduced-motion: reduce) {
+    .rise, h1 .hl i, .cur-star svg { animation: none; }
+    .row, .btn, .pill, .num { transition: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <a class="wordmark" href="#top">Lumi<b>.</b></a>
+    <nav aria-label="Sections">
+      <a href="#top" aria-current="page">Today</a>
+      <a href="#top">Calendar</a>
+      <a href="#top">Settings</a>
+    </nav>
+    <div class="bar-right">
+      <span class="pill-count" id="count">4 to decide</span>
+      <span class="avatar" title="Demo">D</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="top">
+  <section class="hero">
+    <p class="date rise" id="date" style="animation-delay:.08s"></p>
+    <h1 class="serif rise" id="headline" style="animation-delay:.2s"></h1>
+    <p class="sub rise" id="subline" style="animation-delay:.32s"></p>
+  </section>
+
+  <section class="list" id="list" aria-live="polite"></section>
+
+  <footer class="foot">
+    <p class="serif-soft line">Nothing lands on your calendar until you say so. <a href="#top" data-cursor="tell Lumi" data-tone="blue">Did it miss something?</a></p>
+    <dl class="stats">
+      <div><dt>On your calendar</dt><dd class="n" id="stat-cal">1</dd><dd>on your calendar</dd></div>
+      <div><dt>Emails read this week</dt><dd class="n">61</dd><dd>emails read</dd></div>
+      <div><dt>Time spent deciding</dt><dd class="n acc" id="stat-time">0s</dd><dd>spent deciding</dd></div>
+    </dl>
+  </footer>
+
+  <p class="keys">Keyboard: <kbd>J</kbd> <kbd>K</kbd> move · <kbd>A</kbd> attend · <kbd>M</kbd> maybe · <kbd>D</kbd> skip</p>
+  <p class="note">Sample data, taken from one real NYU Wasserman newsletter and one personal email. Decisions here go nowhere.</p>
+</main>
+
+<div class="toast" id="toast" role="status"><span id="toast-text"></span><button id="toast-undo" type="button">Undo</button></div>
+<div class="cur-blob" id="blob" aria-hidden="true"></div>
+<div class="cur-star" id="star" aria-hidden="true">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.5c.9 5.4 4.1 8.6 10.5 10.5-6.4 1.9-9.6 5.1-10.5 10.5C11.1 17.1 7.9 13.9 1.5 12 7.9 10.1 11.1 6.9 12 1.5z"/></svg>
+  <span class="tag" id="tag"></span>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- sample data (dates relative to today so nothing goes stale) ---------- */
+  function inDays(d, h, m) { var t = new Date(); t.setDate(t.getDate() + d); t.setHours(h, m || 0, 0, 0); return t; }
+  var events = [
+    { id: "mw", kind: "COFFEE_CHAT", title: "Coffee Chats with Marshall Wace", start: inDays(2, 12), end: inDays(2, 14), relevance: 5, confidence: .94,
+      host: "Marshall Wace", where: "Interview Room 4 — Wasserman Union Square", conflict: "Linear Algebra Recitation",
+      summary: "Wasserman is bringing Marshall Wace developers in for a coffee chat, aimed squarely at students recruiting for tech.",
+      from: "NYU Wasserman Center", subject: "In my ‘Main Character and Graduated’ Era", received: "Apr 19",
+      excerpt: "Join us for a coffee chat to learn about technology careers at Marshall Wace, a leading global hedge fund. Meet developers on our team, hear about the innovative projects we work on, and discover how technology drives everything we do." },
+    { id: "cf", kind: "DEADLINE", title: "Changemaker Fellowship 2026 — Application Deadline", start: inDays(5, 23, 59), relevance: 3, confidence: .88,
+      host: "NYU Changemaker Council",
+      summary: "a fellowship application closes that night, with grants up to $5,000 for about 35 public-service projects.",
+      from: "NYU Wasserman Center", subject: "In my ‘Main Character and Graduated’ Era", received: "Apr 19",
+      excerpt: "Changemaker Fellowship 2026 Application. Deadline: April 24th. Awards grants of up to $5,000 for approximately 35 students working in areas of public service, social impact, and economic or racial inequality." },
+    { id: "wg", kind: "INFO_SESSION", title: "An Intro to Careers in Big Law", start: inDays(3, 17), end: inDays(3, 18), relevance: 2, confidence: .97,
+      host: "Weil, Gotshal & Manges LLP", where: "Presentation Room B — Wasserman Center",
+      summary: "Weil, Gotshal & Manges is pitching Big Law careers to undergrads of every year.",
+      from: "NYU Wasserman Center", subject: "In my ‘Main Character and Graduated’ Era", received: "Apr 19",
+      excerpt: "Weil, Gotshal & Manges LLP invites undergraduate students of all class years to an information session introducing the path to a career in Big Law." },
+    { id: "qd", kind: "MEETING", title: "Dinner at Quince", start: inDays(8, 19, 30), end: inDays(8, 22), relevance: 1, confidence: .61,
+      host: "Sam Chen", where: "Quince, San Francisco",
+      summary: "a black-tie dinner invitation from Sam, in a private room, with an RSVP due Monday.",
+      from: "Sam Chen", subject: "Dinner at Quince — Thursday?", received: "Apr 18",
+      excerpt: "I've locked in a private room at Quince for Thursday at 7:30 PM. Dress code is black tie. Please RSVP by Monday so I can finalize the guest list with the restaurant." }
+  ];
+  var state = {}; events.forEach(function (e) { state[e.id] = "PENDING"; });
+  var onCalendar = 1;
+  var focusIdx = 0;
+  var opened = {};
+  var decided = 0, t0 = Date.now();
+
+  /* ---------- the sentence about the week (same rules as src/lib/brief.ts) ---------- */
+  var NET = /network|mixer|coffee|meet-?up|social|reception|panel|alumni/i;
+  var REC = /recruit|info session|career|intern|hiring|tech talk|fair/i;
+  var WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+  function count(n, s, p) { return (n < WORDS.length ? WORDS[n] : n) + " " + (n === 1 ? s : (p || s + "s")); }
+  function weekday(d) { return d.toLocaleDateString("en-US", { weekday: "long" }); }
+  function shortTitle(t) { return t.split(/\s[—–-]\s|:\s/)[0].trim(); }
+  function pending() {
+    return events.filter(function (e) { return state[e.id] === "PENDING" || state[e.id] === "MAYBE"; })
+      .sort(function (a, b) { return b.relevance - a.relevance || a.start - b.start; });
+  }
+  function brief(list) {
+    if (!list.length) return { h: "Nothing new. Enjoy the quiet.", hl: "quiet", s: "Lumi keeps reading your inbox twice a day and brings anything worth a look here." };
+    var now = Date.now();
+    var dl = list.filter(function (e) { return e.kind === "DEADLINE"; });
+    var ev = list.filter(function (e) { return e.kind !== "DEADLINE"; });
+    var net = ev.filter(function (e) { return e.kind === "COFFEE_CHAT" || NET.test(e.title); });
+    var rec = ev.filter(function (e) { return e.kind === "INFO_SESSION" || e.kind === "COFFEE_CHAT" || REC.test(e.title + " " + (e.host || "")); });
+    var week = list.filter(function (e) { return (e.start - now) / 864e5 <= 7; });
+    var top = list[0];
+    var soon = dl.slice().sort(function (a, b) { return a.start - b.start; })[0];
+    var parts = [];
+    if (rec.length) parts.push(count(rec.length, "recruiting event"));
+    if (ev.length - rec.length > 0) parts.push(count(ev.length - rec.length, "other event"));
+    if (dl.length) parts.push(count(dl.length, "deadline"));
+    var inv = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+    var s = inv.charAt(0).toUpperCase() + inv.slice(1) + ".";
+    if (top && top.relevance >= 4) s += " If you only make one, make it " + shortTitle(top.title) + " on " + weekday(top.start) + ".";
+    else if (soon) s += " The " + shortTitle(soon.title) + " deadline is " + weekday(soon.start) + ".";
+    if (dl.length && !ev.length) return { h: "One eye on the calendar.", hl: "calendar", s: s };
+    if (week.length >= 3) return { h: "Looks like it’s gonna be a busy week.", hl: "busy", s: s };
+    if (net.length >= 2 || (net.length === 1 && list.length === 1)) return { h: "Let’s go network!", hl: "network", s: s };
+    if (list.length === 1) return { h: "Just one thing to decide.", hl: "one", s: s };
+    return { h: "A few things worth a look.", hl: "few", s: s };
+  }
+
+  /* ---------- rendering ---------- */
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function when(e) {
+    var day = e.start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    var t = function (d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: d.getMinutes() ? "2-digit" : undefined }); };
+    return day + " · " + t(e.start) + (e.end ? "–" + t(e.end) : "");
+  }
+  function match(r) { return r >= 4 ? ["mark", "Strong match"] : r === 3 ? ["plain", "Fair match"] : ["faint", "Outside your lane"]; }
+
+  function renderHero(list) {
+    var b = brief(list);
+    var at = b.h.toLowerCase().indexOf(b.hl);
+    $("headline").innerHTML = at < 0 ? esc(b.h)
+      : esc(b.h.slice(0, at)) + '<span class="hl"><i></i><span>' + esc(b.h.slice(at, at + b.hl.length)) + "</span></span>" + esc(b.h.slice(at + b.hl.length));
+    $("subline").textContent = b.s;
+    var today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    $("date").textContent = today + " · scanned at 1:04 PM" + (list.length ? " · " + list.length + " to decide" : "");
+    $("count").textContent = list.length + " to decide";
+    $("count").hidden = list.length === 0;
+  }
+
+  function renderList(list, animate) {
+    var root = $("list");
+    if (!list.length) {
+      root.innerHTML = '<div class="empty"><h2 class="serif">All clear.</h2><p>Every card is decided. New mail lands here after the next sweep, at 7 PM.</p></div>';
+      return;
+    }
+    if (focusIdx > list.length - 1) focusIdx = list.length - 1;
+    root.innerHTML = list.map(function (e, i) {
+      var lead = i === 0 || i === focusIdx;
+      var m = match(e.relevance);
+      var dl = e.kind === "DEADLINE";
+      var open = opened[e.id] || i === focusIdx;
+      return '<article class="row' + (lead ? " lead" : "") + (i === focusIdx ? " focused" : "") + (animate ? " rise" : "") + '" data-id="' + e.id + '" style="animation-delay:' + (380 + Math.min(i, 6) * 90) + 'ms">' +
+        '<div class="num" aria-hidden="true">' + String(i + 1).padStart(2, "0") + "</div>" +
+        '<div class="body">' +
+          '<div class="pills"><span class="pill ink">' + esc(when(e)) + "</span>" +
+            (dl ? '<span class="pill plain">Deadline</span>' : '<span class="pill ' + m[0] + '">' + m[1] + "</span>") +
+            (state[e.id] === "MAYBE" ? '<span class="pill blue">Maybe</span>' : "") +
+            (e.conflict ? '<span class="pill rose">Overlaps ' + esc(e.conflict) + "</span>" : "") +
+            (e.confidence < .7 ? '<span class="pill faint">Not sure it’s an event</span>' : "") +
+          "</div>" +
+          '<h2 class="serif">' + esc(e.title) + "</h2>" +
+          '<p class="looks"><em>Looks like</em> ' + esc(e.summary) + "</p>" +
+          ((e.where || e.host) ? '<p class="where">' + esc([e.where, e.host && "hosted by " + e.host].filter(Boolean).join(" · ")) + "</p>" : "") +
+          (open
+            ? '<div class="source"><div class="meta"><b>From ' + esc(e.from) + "</b><span>“" + esc(e.subject) + "” · " + esc(e.received) + "</span></div><p>“" + esc(e.excerpt) + "”</p></div>"
+            : '<button class="src-toggle" type="button" data-open="' + e.id + '">Show where this came from</button>') +
+        "</div>" +
+        '<div class="actions">' +
+          '<button class="btn ' + (lead ? "primary" : "outline") + '" type="button" data-act="ACCEPTED" data-cursor="' + (dl ? "set a reminder" : "attend?") + '" data-tone="' + (dl ? "blue" : "mark") + '">' + (dl ? "Remind me" : "Attend") + (lead ? " →" : "") + "</button>" +
+          '<button class="btn" type="button" data-act="MAYBE" data-cursor="maybe later" data-tone="ink">Maybe</button>' +
+          '<button class="btn ghost" type="button" data-act="DECLINED" data-cursor="skip this one" data-tone="ink">Skip</button>' +
+        "</div></article>";
+    }).join("");
+  }
+
+  function render(animate) { var list = pending(); renderHero(list); renderList(list, animate); $("stat-cal").textContent = onCalendar; }
+
+  /* ---------- decisions ---------- */
+  var lastToast = null, toastTimer = null;
+  function toast(text, undo) {
+    $("toast-text").textContent = text;
+    $("toast-undo").hidden = !undo;
+    lastToast = undo || null;
+    $("toast").classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { $("toast").classList.remove("show"); }, 4200);
+  }
+  $("toast-undo").addEventListener("click", function () { if (lastToast) lastToast(); $("toast").classList.remove("show"); });
+
+  function decide(id, status) {
+    var e = events.filter(function (x) { return x.id === id; })[0];
+    var prev = state[id];
+    if (!e || prev === status) return;
+    decided++;
+    $("stat-time").textContent = Math.round((Date.now() - t0) / 1000) + "s";
+    var leaves = status !== "MAYBE";
+    var row = document.querySelector('.row[data-id="' + id + '"]');
+    var apply = function () {
+      state[id] = status;
+      if (status === "ACCEPTED") onCalendar++;
+      if (prev === "ACCEPTED") onCalendar--;
+      render(false);
+      if (status === "ACCEPTED") toast((e.kind === "DEADLINE" ? "Reminder set" : "Added to Google Calendar") + " · " + shortTitle(e.title), function () { state[id] = prev; onCalendar--; render(false); });
+      else if (status === "DECLINED") toast("Skipped · " + shortTitle(e.title), function () { state[id] = prev; render(false); });
+      else toast("Kept as maybe · " + shortTitle(e.title));
+    };
+    if (leaves && row && !matchMedia("(prefers-reduced-motion: reduce)").matches) { row.classList.add("leaving"); setTimeout(apply, 220); }
+    else apply();
+  }
+
+  $("list").addEventListener("click", function (ev) {
+    var open = ev.target.closest("[data-open]");
+    if (open) { opened[open.getAttribute("data-open")] = true; render(false); return; }
+    var act = ev.target.closest("[data-act]");
+    if (act) decide(act.closest(".row").getAttribute("data-id"), act.getAttribute("data-act"));
+  });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.target.matches("input, textarea")) return;
+    var list = pending(); if (!list.length) return;
+    var f = list[focusIdx]; if (!f) return;
+    switch (ev.key.toLowerCase()) {
+      case "j": case "arrowdown": ev.preventDefault(); focusIdx = Math.min(focusIdx + 1, list.length - 1); render(false); break;
+      case "k": case "arrowup": ev.preventDefault(); focusIdx = Math.max(focusIdx - 1, 0); render(false); break;
+      case "a": ev.preventDefault(); decide(f.id, "ACCEPTED"); break;
+      case "m": ev.preventDefault(); decide(f.id, "MAYBE"); break;
+      case "d": ev.preventDefault(); decide(f.id, "DECLINED"); break;
+    }
+  });
+
+  /* ---------- the star cursor ---------- */
+  var TONES = { mark: ["#F5E663", "#111111"], ink: ["#EDEBE5", "#6B6B6B"], blue: ["#DCE3FF", "#2B4BFF"], rose: ["#FFE4E4", "#9A2E2E"] };
+  var IDLE = ["#F5E663", "#2B4BFF"];
+  var mq = matchMedia("(hover: hover) and (prefers-reduced-motion: no-preference)");
+  function setupCursor() {
+    if (!mq.matches) return;
+    document.body.classList.add("has-cursor");
+    var blob = $("blob"), star = $("star"), tag = $("tag"), svg = star.querySelector("svg");
+    var x = -100, y = -100, raf = 0;
+    function paint() { raf = 0; blob.style.transform = "translate(" + x + "px," + y + "px)"; star.style.transform = "translate(" + x + "px," + y + "px)"; }
+    window.addEventListener("mousemove", function (e) {
+      x = e.clientX; y = e.clientY;
+      blob.style.opacity = ".85"; star.style.opacity = "1";
+      if (!raf) raf = requestAnimationFrame(paint);
+    }, { passive: true });
+    document.addEventListener("mouseover", function (e) {
+      var t = e.target.closest("[data-cursor]");
+      var tone = t ? (TONES[t.getAttribute("data-tone")] || TONES.mark) : IDLE;
+      blob.style.background = tone[0]; svg.style.color = tone[1];
+      tag.textContent = t ? t.getAttribute("data-cursor") : "";
+      blob.classList.toggle("hot", !!t); star.classList.toggle("hot", !!t);
+    });
+    document.documentElement.addEventListener("mouseleave", function () { blob.style.opacity = "0"; star.style.opacity = "0"; });
+  }
+
+  render(true);
+  setupCursor();
+})();
+</script>
+
+</body>
+</html>

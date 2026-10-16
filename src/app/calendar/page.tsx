@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Nav } from "@/components/Nav";
+import { StarCursor } from "@/components/StarCursor";
 import type { MockEvent } from "@/lib/mock/events";
 
 type View = "month" | "week";
@@ -16,89 +17,138 @@ async function fetchEvents(): Promise<MockEvent[]> {
   return data.events as MockEvent[];
 }
 
+/**
+ * The calendar: what is on it (accepted) and what is still waiting (pending
+ * and maybe), on the same grid. Accepted events are solid ink, undecided ones
+ * are outlined, so the eye reads commitment before it reads titles.
+ */
 export default function CalendarPage() {
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState(() => new Date());
-  const { data: allEvents = [] } = useQuery({
-    queryKey: ["events"],
-    queryFn: fetchEvents,
-  });
+  const { data: allEvents = [] } = useQuery({ queryKey: ["events"], queryFn: fetchEvents });
 
-  const visibleEvents = useMemo(
-    () => allEvents.filter((e) => e.status === "ACCEPTED" || e.status === "PENDING"),
+  const visible = useMemo(
+    () => allEvents.filter((e) => e.status === "ACCEPTED" || e.status === "PENDING" || e.status === "MAYBE"),
     [allEvents]
   );
+  const accepted = visible.filter((e) => e.status === "ACCEPTED").length;
+  const undecided = visible.length - accepted;
+
+  const title =
+    view === "month"
+      ? cursor.toLocaleDateString("en-US", { month: "long" })
+      : `Week of ${weekStart(cursor).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  const year = cursor.getFullYear();
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="lumi-custom-cursor min-h-screen flex flex-col bg-lumi-bg">
+      <StarCursor />
       <Nav />
 
-      <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="font-serif text-3xl text-lumi-text">Calendar</h1>
-            <p className="text-sm text-lumi-muted mt-1">
-              {visibleEvents.filter((e) => e.status === "ACCEPTED").length} accepted ·{" "}
-              {visibleEvents.filter((e) => e.status === "PENDING").length} pending
+      <main className="flex-1 w-full max-w-6xl mx-auto px-6 sm:px-10 pt-10 sm:pt-14 pb-24 flex flex-col gap-10">
+        <section className="flex flex-wrap items-end justify-between gap-6">
+          <div className="flex flex-col gap-3">
+            <p className="animate-rise [animation-delay:80ms] inline-flex items-center gap-2.5 text-sm text-lumi-muted">
+              <span className="w-2 h-2 rounded-full bg-lumi-accent" />
+              {accepted} on your calendar · {undecided} still to decide
             </p>
+            <h1 className="animate-rise [animation-delay:200ms] font-serif text-[52px] sm:text-[72px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text">
+              {title}
+              <span className="font-serif-soft font-light text-lumi-subtle"> {year}</span>
+            </h1>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 rounded-lg border border-lumi-border p-0.5 bg-lumi-surface">
+          <div className="animate-rise [animation-delay:320ms] flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-full bg-lumi-surface p-1">
               {(["month", "week"] as View[]).map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors capitalize ${
-                    view === v
-                      ? "bg-lumi-bg text-lumi-text"
-                      : "text-lumi-muted hover:text-lumi-text"
+                  className={`min-h-[40px] rounded-full px-4 text-sm font-semibold capitalize transition-colors ${
+                    view === v ? "bg-lumi-text text-white" : "text-lumi-muted hover:text-lumi-text"
                   }`}
                 >
                   {v}
                 </button>
               ))}
             </div>
-
-            <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1.5">
               <button
                 onClick={() => setCursor((d) => shift(d, view, -1))}
-                className="p-1.5 rounded hover:bg-lumi-surface text-lumi-muted"
+                aria-label={`Previous ${view}`}
+                data-cursor={`previous ${view}`}
+                data-cursor-tone="ink"
+                className="w-11 h-11 rounded-full border-[1.5px] border-lumi-border bg-white text-lumi-text hover:border-lumi-text transition-colors inline-flex items-center justify-center"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setCursor(new Date())}
-                className="text-xs text-lumi-muted hover:text-lumi-text px-2 py-1 rounded hover:bg-lumi-surface"
+                className="min-h-[44px] rounded-full border-[1.5px] border-lumi-border bg-white px-4 text-sm font-semibold text-lumi-text hover:border-lumi-text transition-colors"
               >
                 Today
               </button>
               <button
                 onClick={() => setCursor((d) => shift(d, view, 1))}
-                className="p-1.5 rounded hover:bg-lumi-surface text-lumi-muted"
+                aria-label={`Next ${view}`}
+                data-cursor={`next ${view}`}
+                data-cursor-tone="ink"
+                className="w-11 h-11 rounded-full border-[1.5px] border-lumi-border bg-white text-lumi-text hover:border-lumi-text transition-colors inline-flex items-center justify-center"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
+        </section>
+
+        <div className="animate-rise [animation-delay:420ms]">
+          {view === "month" ? (
+            <MonthGrid cursor={cursor} events={visible} />
+          ) : (
+            <WeekGrid cursor={cursor} events={visible} />
+          )}
         </div>
 
-        {view === "month" ? (
-          <MonthGrid cursor={cursor} events={visibleEvents} />
-        ) : (
-          <WeekGrid cursor={cursor} events={visibleEvents} />
-        )}
+        <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-lumi-muted">
+          <span className="inline-flex items-center gap-2">
+            <span className="w-3.5 h-3.5 rounded-full bg-lumi-text" /> on Google Calendar
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-lumi-text bg-white" /> waiting for your decision
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <span className="w-3.5 h-3.5 rounded-full bg-[#DCE3FF]" /> maybe
+          </span>
+        </p>
       </main>
     </div>
+  );
+}
+
+function chipTone(e: MockEvent): string {
+  if (e.status === "ACCEPTED") return "bg-lumi-text text-white hover:bg-lumi-accent";
+  if (e.status === "MAYBE") return "bg-[#DCE3FF] text-lumi-accent hover:bg-lumi-accent hover:text-white";
+  return "bg-white text-lumi-text border-[1.5px] border-lumi-text hover:bg-lumi-text hover:text-white";
+}
+
+function EventChip({ event, showTime = true }: { event: MockEvent; showTime?: boolean }) {
+  const time = new Date(event.startTime).toLocaleTimeString("en-US", { hour: "numeric" }).replace(" ", "");
+  return (
+    <Link
+      href={`/events/${event.id}`}
+      data-cursor="open"
+      data-cursor-tone="ink"
+      className={`block truncate rounded-full px-2.5 py-1 text-[12px] font-semibold leading-tight transition-colors ${chipTone(event)}`}
+    >
+      {showTime && <span className="opacity-60 mr-1.5">{time}</span>}
+      {event.title}
+    </Link>
   );
 }
 
 function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
-  const label = cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-
   const first = new Date(year, month, 1);
   const leading = first.getDay();
   const lastDay = new Date(year, month + 1, 0).getDate();
@@ -108,212 +158,149 @@ function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
   for (let d = 1; d <= lastDay; d++) cells.push(new Date(year, month, d));
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const eventsByDay = new Map<string, MockEvent[]>();
+  const byDay = new Map<string, MockEvent[]>();
   for (const e of events) {
-    const d = new Date(e.startTime);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    const arr = eventsByDay.get(key) ?? [];
-    arr.push(e);
-    eventsByDay.set(key, arr);
+    const k = dayKey(new Date(e.startTime));
+    byDay.set(k, [...(byDay.get(k) ?? []), e]);
   }
-
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  const todayKey = dayKey(new Date());
 
   return (
-    <div className="rounded-xl border border-lumi-border bg-lumi-surface overflow-hidden">
-      <div className="px-5 py-3 border-b border-lumi-border flex items-center gap-2">
-        <CalendarDays className="w-4 h-4 text-lumi-accent" />
-        <h2 className="font-serif text-lg">{label}</h2>
-      </div>
-
-      <div className="grid grid-cols-7 border-b border-lumi-border">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-          <div
-            key={d}
-            className="px-3 py-2 text-[10px] uppercase tracking-wider text-lumi-subtle border-r border-lumi-border last:border-r-0"
-          >
-            {d}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 auto-rows-[minmax(110px,auto)]">
-        {cells.map((day, i) => {
-          if (!day)
+    <div className="overflow-x-auto -mx-6 sm:mx-0 px-6 sm:px-0">
+      <div className="min-w-[640px]">
+        <div className="grid grid-cols-7 border-b border-lumi-border">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+            <div key={d} className="pb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-lumi-subtle">
+              {d}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {cells.map((day, i) => {
+            if (!day) return <div key={i} className="min-h-[104px] border-b border-lumi-border" />;
+            const key = dayKey(day);
+            const dayEvents = (byDay.get(key) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime));
+            const isToday = key === todayKey;
             return (
               <div
                 key={i}
-                className="border-r border-b border-lumi-border bg-lumi-bg/40 last-in-row:border-r-0"
-              />
-            );
-          const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
-          const dayEvents = eventsByDay.get(key) ?? [];
-          const isToday = key === todayKey;
-          return (
-            <div
-              key={i}
-              className="relative border-r border-b border-lumi-border p-2 hover:bg-lumi-surface-hover transition-colors"
-            >
-              <div
-                className={`text-xs font-medium mb-1 ${
-                  isToday
-                    ? "inline-flex w-5 h-5 rounded-full bg-lumi-accent text-lumi-bg items-center justify-center"
-                    : "text-lumi-muted"
-                }`}
+                className="min-h-[104px] border-b border-lumi-border py-2.5 pr-2 flex flex-col gap-1.5 transition-colors hover:bg-[#FAFAF7] rounded-lg"
               >
-                {day.getDate()}
+                <div
+                  className={`font-serif font-serif-soft text-[20px] leading-none w-8 h-8 inline-flex items-center justify-center rounded-full ${
+                    isToday ? "bg-lumi-accent text-white" : "text-lumi-text"
+                  }`}
+                >
+                  {day.getDate()}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {dayEvents.slice(0, 3).map((e) => (
+                    <EventChip key={e.id} event={e} />
+                  ))}
+                  {dayEvents.length > 3 && (
+                    <span className="px-2 text-[11px] text-lumi-subtle">+{dayEvents.length - 3} more</span>
+                  )}
+                </div>
               </div>
-              <div className="space-y-1">
-                {dayEvents.slice(0, 3).map((e) => (
-                  <EventChip key={e.id} event={e} />
-                ))}
-                {dayEvents.length > 3 && (
-                  <div className="text-[10px] text-lumi-subtle px-1">
-                    +{dayEvents.length - 3} more
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
 function WeekGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
-  const start = new Date(cursor);
-  start.setDate(cursor.getDate() - cursor.getDay());
-  const days: Date[] = Array.from({ length: 7 }, (_, i) => {
+  const start = weekStart(cursor);
+  const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     return d;
   });
-
-  const label = `${days[0].toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })} – ${days[6].toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-
   const hours = Array.from({ length: 14 }, (_, i) => 8 + i); // 8 AM – 9 PM
-  const HOUR_PX = 44;
-
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  const HOUR_PX = 48;
+  const todayKey = dayKey(new Date());
 
   return (
-    <div className="rounded-xl border border-lumi-border bg-lumi-surface overflow-hidden">
-      <div className="px-5 py-3 border-b border-lumi-border flex items-center gap-2">
-        <CalendarDays className="w-4 h-4 text-lumi-accent" />
-        <h2 className="font-serif text-lg">Week of {label}</h2>
-      </div>
-
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-lumi-border">
-        <div />
-        {days.map((d) => {
-          const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-          const isToday = key === todayKey;
-          return (
-            <div
-              key={d.toISOString()}
-              className="px-2 py-2 border-l border-lumi-border text-center"
-            >
-              <div className="text-[10px] uppercase tracking-wider text-lumi-subtle">
-                {d.toLocaleDateString("en-US", { weekday: "short" })}
+    <div className="overflow-x-auto -mx-6 sm:mx-0 px-6 sm:px-0">
+      <div className="min-w-[760px]">
+        <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-lumi-border">
+          <div />
+          {days.map((d) => {
+            const isToday = dayKey(d) === todayKey;
+            return (
+              <div key={d.toISOString()} className="pb-3 flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-lumi-subtle">
+                  {d.toLocaleDateString("en-US", { weekday: "short" })}
+                </span>
+                <span
+                  className={`font-serif font-serif-soft text-[20px] leading-none w-8 h-8 inline-flex items-center justify-center rounded-full ${
+                    isToday ? "bg-lumi-accent text-white" : "text-lumi-text"
+                  }`}
+                >
+                  {d.getDate()}
+                </span>
               </div>
-              <div
-                className={`text-sm mt-0.5 ${
-                  isToday ? "text-lumi-accent font-semibold" : "text-lumi-text"
-                }`}
-              >
-                {d.getDate()}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
 
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] relative">
-        <div>
-          {hours.map((h) => (
-            <div
-              key={h}
-              className="text-[10px] text-lumi-subtle text-right pr-2"
-              style={{ height: HOUR_PX }}
-            >
-              {formatHour(h)}
+        <div className="grid grid-cols-[56px_repeat(7,1fr)]">
+          <div>
+            {hours.map((h) => (
+              <div key={h} className="text-[11px] text-lumi-subtle pr-3 text-right -translate-y-2" style={{ height: HOUR_PX }}>
+                {formatHour(h)}
+              </div>
+            ))}
+          </div>
+          {days.map((d, di) => (
+            <div key={di} className="relative border-l border-lumi-border">
+              {hours.map((h) => (
+                <div key={h} className="border-t border-lumi-border/70" style={{ height: HOUR_PX }} />
+              ))}
+              {events
+                .filter((e) => sameDay(new Date(e.startTime), d))
+                .map((e) => {
+                  const s = new Date(e.startTime);
+                  const en = e.endTime ? new Date(e.endTime) : new Date(s.getTime() + 3600_000);
+                  const startH = s.getHours() + s.getMinutes() / 60;
+                  const endH = en.getHours() + en.getMinutes() / 60;
+                  if (startH < 8 || startH > 22) return null;
+                  const top = (startH - 8) * HOUR_PX + 2;
+                  const height = Math.max(30, (endH - startH) * HOUR_PX - 4);
+                  return (
+                    <Link
+                      key={e.id}
+                      href={`/events/${e.id}`}
+                      data-cursor="open"
+                      data-cursor-tone="ink"
+                      className={`absolute left-1 right-1 overflow-hidden rounded-xl px-2.5 py-1.5 text-[12px] leading-tight transition-colors ${chipTone(e)}`}
+                      style={{ top, height }}
+                    >
+                      <div className="font-semibold truncate">{e.title}</div>
+                      <div className="opacity-60 truncate">
+                        {s.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                      </div>
+                    </Link>
+                  );
+                })}
             </div>
           ))}
         </div>
-        {days.map((d, di) => (
-          <div key={di} className="relative border-l border-lumi-border">
-            {hours.map((h) => (
-              <div
-                key={h}
-                className="border-t border-lumi-border/50"
-                style={{ height: HOUR_PX }}
-              />
-            ))}
-            {events
-              .filter((e) => sameDay(new Date(e.startTime), d))
-              .map((e) => {
-                const s = new Date(e.startTime);
-                const en = e.endTime
-                  ? new Date(e.endTime)
-                  : new Date(s.getTime() + 60 * 60 * 1000);
-                const startH = s.getHours() + s.getMinutes() / 60;
-                const endH = en.getHours() + en.getMinutes() / 60;
-                const top = (startH - 8) * HOUR_PX;
-                const height = Math.max(24, (endH - startH) * HOUR_PX);
-                if (startH < 8 || startH > 22) return null;
-                return (
-                  <Link
-                    key={e.id}
-                    href={`/events/${e.id}`}
-                    className={`absolute left-1 right-1 rounded-md px-2 py-1 text-[11px] overflow-hidden hover:z-10 hover:shadow-lg transition-shadow ${
-                      e.status === "ACCEPTED"
-                        ? "bg-lumi-green/20 border border-lumi-green/40 text-lumi-text"
-                        : "bg-lumi-accent/15 border border-lumi-accent/40 text-lumi-text"
-                    }`}
-                    style={{ top, height }}
-                  >
-                    <div className="font-medium truncate">{e.title}</div>
-                    <div className="text-[10px] text-lumi-muted truncate">
-                      {s.toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                  </Link>
-                );
-              })}
-          </div>
-        ))}
       </div>
     </div>
   );
 }
 
-function EventChip({ event }: { event: MockEvent }) {
-  const isAccepted = event.status === "ACCEPTED";
-  return (
-    <Link
-      href={`/events/${event.id}`}
-      className={`block text-[11px] px-1.5 py-0.5 rounded truncate transition-colors ${
-        isAccepted
-          ? "bg-lumi-green/20 text-lumi-text hover:bg-lumi-green/30"
-          : "bg-lumi-accent/15 text-lumi-text hover:bg-lumi-accent/25"
-      }`}
-    >
-      <span className="text-lumi-subtle mr-1">
-        {new Date(event.startTime).toLocaleTimeString("en-US", {
-          hour: "numeric",
-        })}
-      </span>
-      {event.title}
-    </Link>
-  );
+function weekStart(d: Date): Date {
+  const s = new Date(d);
+  s.setDate(d.getDate() - d.getDay());
+  s.setHours(0, 0, 0, 0);
+  return s;
+}
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
 function shift(d: Date, view: View, dir: 1 | -1): Date {
@@ -324,11 +311,7 @@ function shift(d: Date, view: View, dir: 1 | -1): Date {
 }
 
 function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
 function formatHour(h: number): string {

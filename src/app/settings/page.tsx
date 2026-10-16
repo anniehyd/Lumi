@@ -3,21 +3,9 @@
 import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Mail,
-  Shield,
-  Check,
-  LogOut,
-  Rss,
-  Copy,
-  ExternalLink,
-  Compass,
-  BarChart3,
-  Link2,
-  Loader2,
-  RefreshCw,
-} from "lucide-react";
+import { Check, LogOut, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Nav } from "@/components/Nav";
+import { StarCursor } from "@/components/StarCursor";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { MetricsCard } from "@/components/MetricsCard";
 
@@ -33,41 +21,47 @@ export default function SettingsPage() {
   const signedIn = Boolean(session?.user);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="lumi-custom-cursor min-h-screen flex flex-col bg-lumi-bg">
+      <StarCursor />
       <Nav />
 
-      <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
-        <h1 className="font-serif text-3xl text-lumi-text mb-1">Settings</h1>
-        <p className="text-sm text-lumi-muted mb-10">
-          Where Lumi reads from, what it ranks against, and where it writes.
-        </p>
+      <main className="flex-1 w-full max-w-[960px] mx-auto px-6 sm:px-10 pt-10 sm:pt-16 pb-24">
+        <div className="flex flex-col gap-4 mb-14">
+          <p className="animate-rise [animation-delay:80ms] inline-flex items-center gap-2.5 text-sm text-lumi-muted">
+            <span className="w-2 h-2 rounded-full bg-lumi-accent" />
+            Every control here does something; nothing is decorative.
+          </p>
+          <h1 className="animate-rise [animation-delay:200ms] font-serif text-[52px] sm:text-[72px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text">
+            Where Lumi reads, <span className="italic font-medium">ranks</span> and writes.
+          </h1>
+        </div>
 
-        <Section icon={<Shield className="w-4 h-4" />} title="Account">
+        <Section title="Account">
           <AccountRow />
         </Section>
 
-        <Section icon={<Mail className="w-4 h-4" />} title="Email source">
+        <Section title="Email source">
           <InboxRow signedIn={signedIn} email={session?.user?.email ?? null} />
           <ForwardingRow signedIn={signedIn} />
         </Section>
 
-        <Section icon={<Link2 className="w-4 h-4" />} title="Handshake">
+        <Section title="Handshake">
           <HandshakeRow signedIn={signedIn} />
         </Section>
 
-        <Section icon={<Compass className="w-4 h-4" />} title="What matters to you">
+        <Section title="What matters to you">
           {signedIn ? (
             <ProfileEditor />
           ) : (
-            <p className="px-5 py-4 text-xs text-lumi-muted">Sign in to set your interests.</p>
+            <p className="py-5 text-sm text-lumi-muted">Sign in to set your interests.</p>
           )}
         </Section>
 
-        <Section icon={<BarChart3 className="w-4 h-4" />} title="Your numbers — last 7 days">
+        <Section title="Your numbers — last 7 days">
           <MetricsCard />
         </Section>
 
-        <Section icon={<Rss className="w-4 h-4" />} title="Sync to Apple Calendar" id="calendar-feed">
+        <Section title="Sync to Apple Calendar" id="calendar-feed">
           <FeedSection signedIn={signedIn} />
         </Section>
       </main>
@@ -83,19 +77,19 @@ function AccountRow() {
   const image = session?.user?.image;
   const initial = (email ?? "D").charAt(0).toUpperCase();
   return (
-    <div className="px-5 py-4 flex items-center justify-between">
+    <div className="py-5 flex items-center justify-between gap-4">
       <div className="flex items-center gap-3">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={image} alt="" className="w-10 h-10 rounded-full border border-lumi-border" />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-lumi-bg border border-lumi-border flex items-center justify-center text-sm font-medium">
+          <div className="w-11 h-11 rounded-full bg-lumi-surface flex items-center justify-center text-sm font-semibold">
             {initial}
           </div>
         )}
         <div>
-          <div className="text-sm text-lumi-text">{email ?? "Demo mode"}</div>
-          <div className="text-xs text-lumi-muted">
+          <div className="text-[15px] font-semibold text-lumi-text">{email ?? "Demo mode"}</div>
+          <div className="text-sm text-lumi-muted">
             {session ? "Connected via Google" : "Sample data only — sign in from the landing page"}
           </div>
         </div>
@@ -103,7 +97,7 @@ function AccountRow() {
       {session && (
         <button
           onClick={() => signOut({ callbackUrl: "/" })}
-          className="flex items-center gap-1.5 text-xs text-lumi-muted hover:text-lumi-rose transition-colors"
+          className="flex items-center gap-1.5 text-sm font-semibold text-lumi-muted hover:text-lumi-rose transition-colors"
         >
           <LogOut className="w-3.5 h-3.5" />
           Sign out
@@ -145,7 +139,7 @@ function InboxRow({ signedIn, email }: { signedIn: boolean; email: string | null
         label="Connected inbox"
         sub="Swept twice a day, 1 PM and 7 PM New York. Inbox tab only — Promotions, Social, archived and sent mail are never read."
       >
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 text-sm font-semibold">
           <span className={`w-1.5 h-1.5 rounded-full ${signedIn ? "bg-lumi-green" : "bg-lumi-border"}`} />
           <span className="text-lumi-text">{email ?? "Not connected"}</span>
         </div>
@@ -155,24 +149,25 @@ function InboxRow({ signedIn, email }: { signedIn: boolean; email: string | null
           <button
             onClick={() => scan.mutate()}
             disabled={!signedIn || scan.isPending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-1.5 text-xs font-medium text-lumi-muted hover:text-lumi-text hover:border-lumi-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            data-cursor="read my inbox" data-cursor-tone="blue"
+            className="inline-flex items-center gap-2 min-h-[44px] rounded-full bg-lumi-surface px-5 text-sm font-semibold text-lumi-text transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             {scan.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-4 h-4" />
             )}
             {scan.isPending ? "Scanning…" : "Scan now"}
           </button>
           {scan.isSuccess && (
-            <span className="text-[11px] text-lumi-muted">
+            <span className="text-xs text-lumi-muted">
               {scan.data.newEmails} new email{scan.data.newEmails === 1 ? "" : "s"},{" "}
               {scan.data.eventsCreated + scan.data.handshake.eventsCreated} new event
               {scan.data.eventsCreated + scan.data.handshake.eventsCreated === 1 ? "" : "s"}
             </span>
           )}
-          {scan.isError && <span className="text-[11px] text-lumi-rose">Scan failed. Try again?</span>}
-          {!signedIn && <span className="text-[11px] text-lumi-subtle">Sign in to scan</span>}
+          {scan.isError && <span className="text-xs text-lumi-rose">Scan failed. Try again?</span>}
+          {!signedIn && <span className="text-xs text-lumi-subtle">Sign in to scan</span>}
         </div>
       </Row>
     </>
@@ -231,7 +226,7 @@ function ForwardingRow({ signedIn }: { signedIn: boolean }) {
   if (!signedIn) {
     return (
       <Row label="Forward to Lumi" sub="Sign in to get a private forwarding address.">
-        <span className="text-[11px] text-lumi-subtle">Sign in</span>
+        <span className="text-xs text-lumi-subtle">Sign in</span>
       </Row>
     );
   }
@@ -242,28 +237,28 @@ function ForwardingRow({ signedIn }: { signedIn: boolean }) {
         label="Forward to Lumi"
         sub="Not available on this deployment: no inbound email domain is configured (INBOUND_EMAIL_DOMAIN)."
       >
-        <span className="text-[11px] text-lumi-subtle">Unavailable</span>
+        <span className="text-xs text-lumi-subtle">Unavailable</span>
       </Row>
     );
   }
 
   return (
-    <div className="px-5 py-4">
-      <div className="text-sm text-lumi-text">Forward to Lumi</div>
-      <p className="mt-0.5 text-xs text-lumi-muted leading-relaxed mb-3">
+    <div className="py-5">
+      <div className="text-[15px] font-semibold text-lumi-text">Forward to Lumi</div>
+      <p className="mt-1 text-sm text-lumi-muted leading-relaxed mb-4 max-w-[60ch]">
         {data?.gmailConnected
           ? "Also works alongside your connected inbox: anything forwarded here is read even if it lands outside the Inbox tab."
           : "No Gmail permission needed. Forward newsletters and invitations to this address and Lumi turns them into cards here and events in your calendar feed."}
       </p>
 
-      <div className="rounded-lg border border-lumi-border bg-lumi-bg p-3 flex items-center gap-2">
-        <code className="flex-1 text-xs text-lumi-text font-mono truncate">
+      <div className="rounded-2xl bg-lumi-surface pl-5 pr-2 py-2 flex items-center gap-3">
+        <code className="flex-1 text-sm text-lumi-text font-mono truncate">
           {isLoading ? "Loading…" : (data?.address ?? "Unavailable")}
         </code>
         <button
           onClick={copyAddress}
           disabled={!data?.address}
-          className="flex items-center gap-1 text-xs text-lumi-muted hover:text-lumi-text px-2 py-1 rounded hover:bg-lumi-surface transition-colors disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 min-h-[40px] rounded-full bg-white border-[1.5px] border-lumi-border px-4 text-sm font-semibold text-lumi-text hover:border-lumi-text transition-colors disabled:opacity-40"
         >
           {copied ? (
             <>
@@ -280,7 +275,7 @@ function ForwardingRow({ signedIn }: { signedIn: boolean }) {
       </div>
 
       {data?.confirmation && (
-        <div className="mt-3 rounded-lg border border-lumi-accent/40 bg-lumi-accent/10 p-3 text-xs text-lumi-text">
+        <div className="mt-3 rounded-2xl bg-[#DCE3FF] p-4 text-sm text-lumi-text">
           <div className="font-medium">
             Gmail asked to confirm forwarding
             {data.confirmation.forwarder ? ` from ${data.confirmation.forwarder}` : ""}.
@@ -309,7 +304,7 @@ function ForwardingRow({ signedIn }: { signedIn: boolean }) {
       )}
 
       <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-lumi-subtle">
+        <span className="text-xs text-lumi-subtle">
           {data?.lastReceivedAt
             ? `Last forwarded email received ${new Date(data.lastReceivedAt).toLocaleString()}`
             : "Nothing received yet"}
@@ -317,23 +312,23 @@ function ForwardingRow({ signedIn }: { signedIn: boolean }) {
         <button
           onClick={() => rotate.mutate()}
           disabled={!data?.address || rotate.isPending}
-          className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-1.5 text-xs font-medium text-lumi-muted hover:text-lumi-text hover:border-lumi-subtle transition-colors disabled:opacity-40"
+          className="inline-flex items-center gap-2 min-h-[44px] rounded-full bg-lumi-surface px-5 text-sm font-semibold text-lumi-text transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
         >
           {rotate.isPending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className="w-4 h-4" />
           )}
           New address
         </button>
       </div>
       {rotate.isSuccess && (
-        <p className="mt-2 text-[11px] text-lumi-muted">
+        <p className="mt-2 text-xs text-lumi-muted">
           New address issued. Update your Gmail filter; mail to the old one is dropped.
         </p>
       )}
 
-      <details className="mt-4 text-xs text-lumi-muted group">
+      <details className="mt-5 text-sm text-lumi-muted group">
         <summary className="cursor-pointer select-none text-lumi-subtle group-hover:text-lumi-muted">
           Set up a Gmail filter that forwards automatically
         </summary>
@@ -412,7 +407,7 @@ function HandshakeRow({ signedIn }: { signedIn: boolean }) {
   });
 
   if (!signedIn) {
-    return <p className="px-5 py-4 text-xs text-lumi-muted">Sign in to connect your Handshake calendar.</p>;
+    return <p className="py-5 text-sm text-lumi-muted">Sign in to connect your Handshake calendar.</p>;
   }
 
   if (data?.connected) {
@@ -426,7 +421,7 @@ function HandshakeRow({ signedIn }: { signedIn: boolean }) {
         <button
           onClick={() => disconnect.mutate()}
           disabled={disconnect.isPending}
-          className="text-xs text-lumi-muted hover:text-lumi-rose transition-colors disabled:opacity-40"
+          className="text-sm font-semibold text-lumi-muted hover:text-lumi-rose transition-colors disabled:opacity-40"
         >
           Disconnect
         </button>
@@ -435,8 +430,8 @@ function HandshakeRow({ signedIn }: { signedIn: boolean }) {
   }
 
   return (
-    <div className="px-5 py-4">
-      <p className="text-xs text-lumi-muted mb-3 leading-relaxed">
+    <div className="py-5">
+      <p className="text-sm text-lumi-muted mb-4 leading-relaxed max-w-[60ch]">
         In Handshake go to Settings → Calendar export and copy your calendar link. Lumi
         checks it on every sweep; no Google permission needed.
       </p>
@@ -451,14 +446,14 @@ function HandshakeRow({ signedIn }: { signedIn: boolean }) {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://app.joinhandshake.com/….ics"
-          className="flex-1 text-xs bg-lumi-bg border border-lumi-border rounded-md px-2.5 py-1.5 focus:outline-none focus:border-lumi-accent transition-colors"
+          className="flex-1 min-w-0 min-h-[44px] text-sm bg-lumi-surface border-[1.5px] border-transparent rounded-full px-5 focus:outline-none focus:border-lumi-text transition-colors"
         />
         <button
           type="submit"
           disabled={!url.trim() || connect.isPending}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-lumi-accent px-3 py-1.5 text-xs font-semibold text-lumi-bg hover:bg-lumi-accent-hover transition-colors disabled:opacity-40"
+          className="inline-flex items-center gap-2 min-h-[44px] rounded-full bg-lumi-text px-5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed aria-disabled:opacity-40"
         >
-          {connect.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {connect.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
           Connect
         </button>
       </form>
@@ -504,8 +499,8 @@ function FeedSection({ signedIn }: { signedIn: boolean }) {
   }
 
   return (
-    <div className="px-5 py-4">
-      <p className="text-sm text-lumi-muted mb-4 leading-relaxed">
+    <div className="py-5">
+      <p className="text-sm text-lumi-muted mb-4 leading-relaxed max-w-[60ch]">
         Subscribe Apple Calendar, or any iCal app, to your accepted and maybe events. The
         link is private to you: anyone holding it can read those events, so regenerate it
         if it leaks.
@@ -515,14 +510,14 @@ function FeedSection({ signedIn }: { signedIn: boolean }) {
         <p className="text-xs text-lumi-muted">Sign in to get your subscription link.</p>
       ) : (
         <>
-          <div className="rounded-lg border border-lumi-border bg-lumi-bg p-3 flex items-center gap-2">
-            <code className="flex-1 text-xs text-lumi-text font-mono truncate">
+          <div className="rounded-2xl bg-lumi-surface pl-5 pr-2 py-2 flex items-center gap-3">
+            <code className="flex-1 text-sm text-lumi-text font-mono truncate">
               {isLoading ? "Loading…" : (data?.https ?? "Unavailable")}
             </code>
             <button
               onClick={copyFeed}
               disabled={!data}
-              className="flex items-center gap-1 text-xs text-lumi-muted hover:text-lumi-text px-2 py-1 rounded hover:bg-lumi-surface transition-colors disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 min-h-[40px] rounded-full bg-white border-[1.5px] border-lumi-border px-4 text-sm font-semibold text-lumi-text hover:border-lumi-text transition-colors disabled:opacity-40"
             >
               {copied ? (
                 <>
@@ -538,35 +533,36 @@ function FeedSection({ signedIn }: { signedIn: boolean }) {
             </button>
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <a
               href={data?.webcal ?? "#"}
               aria-disabled={!data}
-              className="flex items-center gap-1.5 rounded-lg bg-lumi-accent px-3 py-2 text-xs font-semibold text-lumi-bg hover:bg-lumi-accent-hover transition-colors aria-disabled:opacity-40"
+              data-cursor="subscribe" data-cursor-tone="mark"
+              className="inline-flex items-center gap-2 min-h-[44px] rounded-full bg-lumi-text px-5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed aria-disabled:opacity-40"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="w-4 h-4" />
               Open in Apple Calendar
             </a>
             <button
               onClick={() => rotate.mutate()}
               disabled={!data || rotate.isPending}
-              className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text hover:border-lumi-subtle transition-colors disabled:opacity-40"
+              className="inline-flex items-center gap-2 min-h-[44px] rounded-full bg-lumi-surface px-5 text-sm font-semibold text-lumi-text transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             >
               {rotate.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className="w-4 h-4" />
               )}
               Regenerate link
             </button>
           </div>
           {rotate.isSuccess && (
-            <p className="mt-2 text-[11px] text-lumi-muted">
+            <p className="mt-2 text-xs text-lumi-muted">
               New link issued. Re-subscribe in your calendar app; the old link no longer works.
             </p>
           )}
 
-          <details className="mt-4 text-xs text-lumi-muted group">
+          <details className="mt-5 text-sm text-lumi-muted group">
             <summary className="cursor-pointer select-none text-lumi-subtle group-hover:text-lumi-muted">
               Manual setup (Calendar → File → New Calendar Subscription)
             </summary>
@@ -585,34 +581,30 @@ function FeedSection({ signedIn }: { signedIn: boolean }) {
 
 /* ─── Layout ─── */
 
-function Section({
-  icon,
-  title,
-  id,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  id?: string;
-  children: React.ReactNode;
-}) {
+/**
+ * A section is a hairline, a serif heading on the left and its rows on the
+ * right; on a phone the heading sits above. No boxes around anything.
+ */
+function Section({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="mb-8 rounded-xl border border-lumi-border bg-lumi-surface overflow-hidden">
-      <div className="px-5 py-3 border-b border-lumi-border flex items-center gap-2">
-        <span className="text-lumi-accent">{icon}</span>
-        <h2 className="font-serif text-base text-lumi-text">{title}</h2>
-      </div>
-      <div className="divide-y divide-lumi-border">{children}</div>
+    <section
+      id={id}
+      className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-x-12 gap-y-2 border-t border-lumi-border py-8 scroll-mt-24"
+    >
+      <h2 className="font-serif text-[28px] font-medium leading-[1.1] tracking-[-0.02em] text-lumi-text md:pt-5">
+        {title}
+      </h2>
+      <div className="min-w-0 divide-y divide-lumi-border">{children}</div>
     </section>
   );
 }
 
 function Row({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="px-5 py-4 flex items-start justify-between gap-6">
-      <div className="flex-1 min-w-0">
-        <div className="text-sm text-lumi-text">{label}</div>
-        {sub && <div className="text-xs text-lumi-muted mt-0.5">{sub}</div>}
+    <div className="py-5 flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
+      <div className="flex-1 min-w-[220px]">
+        <div className="text-[15px] font-semibold text-lumi-text">{label}</div>
+        {sub && <div className="text-sm text-lumi-muted mt-1 leading-relaxed">{sub}</div>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>

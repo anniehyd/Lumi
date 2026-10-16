@@ -65,8 +65,8 @@ export function ProfileEditor() {
   }
 
   return (
-    <div className="space-y-5 py-1">
-      <p className="text-xs text-lumi-muted leading-relaxed">
+    <div className="space-y-6 py-5">
+      <p className="text-sm text-lumi-muted leading-relaxed max-w-[60ch]">
         Lumi scores every event it finds from 1 to 5 against this. Changes take
         effect on the next scan.
       </p>
@@ -80,10 +80,10 @@ export function ProfileEditor() {
             <button
               key={r.id}
               onClick={() => setProfile({ ...profile, role: r.id })}
-              className={`rounded-full px-3 py-1 text-xs border transition-colors ${
+              className={`rounded-full px-3.5 py-1.5 text-sm border-[1.5px] transition-colors ${
                 profile.role === r.id
-                  ? "bg-lumi-accent text-lumi-bg border-lumi-accent"
-                  : "border-lumi-border text-lumi-muted hover:border-lumi-accent/50"
+                  ? "bg-lumi-text text-white border-lumi-text"
+                  : "border-lumi-border text-lumi-muted hover:border-lumi-text hover:text-lumi-text"
               }`}
             >
               {r.label}
@@ -101,10 +101,10 @@ export function ProfileEditor() {
             <button
               key={i}
               onClick={() => toggle(i)}
-              className={`rounded-full px-3 py-1 text-xs border transition-colors ${
+              className={`rounded-full px-3.5 py-1.5 text-sm border-[1.5px] transition-colors ${
                 profile.interests.includes(i)
-                  ? "bg-lumi-accent text-lumi-bg border-lumi-accent"
-                  : "border-lumi-border text-lumi-muted hover:border-lumi-accent/50"
+                  ? "bg-lumi-text text-white border-lumi-text"
+                  : "border-lumi-border text-lumi-muted hover:border-lumi-text hover:text-lumi-text"
               }`}
             >
               {i}
@@ -121,7 +121,7 @@ export function ProfileEditor() {
           <input
             value={profile.school ?? ""}
             onChange={(e) => setProfile({ ...profile, school: e.target.value })}
-            className="w-full rounded-lg bg-lumi-bg border border-lumi-border px-3 py-1.5 text-sm text-lumi-text focus:border-lumi-accent focus:outline-none"
+            className="w-full rounded-xl bg-lumi-surface border-[1.5px] border-transparent px-3.5 py-2.5 text-sm text-lumi-text focus:border-lumi-text focus:outline-none"
           />
         </div>
         <div>
@@ -131,7 +131,7 @@ export function ProfileEditor() {
           <input
             value={profile.gradYear ?? ""}
             onChange={(e) => setProfile({ ...profile, gradYear: e.target.value })}
-            className="w-full rounded-lg bg-lumi-bg border border-lumi-border px-3 py-1.5 text-sm text-lumi-text focus:border-lumi-accent focus:outline-none"
+            className="w-full rounded-xl bg-lumi-surface border-[1.5px] border-transparent px-3.5 py-2.5 text-sm text-lumi-text focus:border-lumi-text focus:outline-none"
           />
         </div>
       </div>
@@ -144,7 +144,7 @@ export function ProfileEditor() {
           value={profile.note ?? ""}
           onChange={(e) => setProfile({ ...profile, note: e.target.value })}
           rows={3}
-          className="w-full rounded-lg bg-lumi-bg border border-lumi-border px-3 py-2 text-sm text-lumi-text focus:border-lumi-accent focus:outline-none resize-none"
+          className="w-full rounded-xl bg-lumi-surface border-[1.5px] border-transparent px-3.5 py-2.5 text-sm text-lumi-text focus:border-lumi-text focus:outline-none resize-none"
         />
       </div>
 
@@ -152,7 +152,8 @@ export function ProfileEditor() {
         <button
           onClick={save}
           disabled={state === "saving"}
-          className="inline-flex items-center gap-2 rounded-lg bg-lumi-accent px-4 py-2 text-xs font-semibold text-lumi-bg hover:bg-lumi-accent-hover transition-colors disabled:opacity-40"
+          data-cursor="save" data-cursor-tone="mark"
+          className="inline-flex items-center gap-2 min-h-[44px] rounded-full bg-lumi-text px-5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-40"
         >
           {state === "saving" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
           Save preferences
