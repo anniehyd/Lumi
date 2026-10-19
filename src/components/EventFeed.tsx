@@ -112,19 +112,19 @@ export function EventFeed({ lastScan }: { lastScan?: string | null }) {
     : null;
 
   return (
-    <div className="flex flex-col gap-14 sm:gap-16">
-      <section className="flex flex-col items-start gap-5">
+    <div className="flex flex-col gap-8 sm:gap-10">
+      <section className="flex flex-col items-start gap-2.5">
         <p className="animate-rise [animation-delay:80ms] inline-flex items-center gap-2.5 text-sm text-lumi-muted">
           <span className="w-2 h-2 rounded-full bg-lumi-accent" />
           {today}
           {scanned && ` · scanned at ${scanned}`}
           {pending.length > 0 && ` · ${pending.length} to decide`}
         </p>
-        <h1 className="animate-rise [animation-delay:200ms] font-serif text-[40px] sm:text-[60px] font-normal leading-[1] tracking-[-0.03em] text-lumi-text max-w-[16ch]">
+        <h1 className="animate-rise [animation-delay:200ms] font-serif text-[26px] sm:text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-lumi-text max-w-[40ch]">
           {isLoading ? "Reading your inbox…" : <Headline text={brief.headline} emphasis={brief.emphasis} />}
         </h1>
         {!isLoading && (
-          <p className="animate-rise [animation-delay:320ms] text-lg sm:text-xl leading-[1.45] text-[#4A4A4A] max-w-[42ch]">
+          <p className="animate-rise [animation-delay:320ms] text-[15px] leading-[1.5] text-lumi-muted max-w-[60ch]">
             {brief.subline}
           </p>
         )}
@@ -163,7 +163,7 @@ function Headline({ text, emphasis }: { text: string; emphasis: string | null })
       <span className="relative inline-block italic font-medium">
         <span
           aria-hidden="true"
-          className="animate-mark absolute -left-1 -right-1.5 bottom-[10px] h-[34%] rounded bg-lumi-mark origin-left"
+          className="animate-mark absolute -left-0.5 -right-1 bottom-[3px] h-[36%] rounded-sm bg-lumi-mark origin-left"
         />
         <span className="relative">{word}</span>
       </span>
