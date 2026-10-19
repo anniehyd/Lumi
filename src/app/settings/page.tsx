@@ -31,7 +31,7 @@ export default function SettingsPage() {
             <span className="w-2 h-2 rounded-full bg-lumi-accent" />
             Every control here does something; nothing is decorative.
           </p>
-          <h1 className="animate-rise [animation-delay:200ms] font-serif text-[52px] sm:text-[72px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text">
+          <h1 className="animate-rise [animation-delay:200ms] font-serif text-[40px] sm:text-[56px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text">
             Where Lumi reads, <span className="italic font-medium">ranks</span> and writes.
           </h1>
         </div>

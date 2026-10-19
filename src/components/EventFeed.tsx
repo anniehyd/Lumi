@@ -120,7 +120,7 @@ export function EventFeed({ lastScan }: { lastScan?: string | null }) {
           {scanned && ` · scanned at ${scanned}`}
           {pending.length > 0 && ` · ${pending.length} to decide`}
         </p>
-        <h1 className="animate-rise [animation-delay:200ms] font-serif text-[52px] sm:text-[84px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text max-w-[13ch]">
+        <h1 className="animate-rise [animation-delay:200ms] font-serif text-[40px] sm:text-[60px] font-normal leading-[1] tracking-[-0.03em] text-lumi-text max-w-[16ch]">
           {isLoading ? "Reading your inbox…" : <Headline text={brief.headline} emphasis={brief.emphasis} />}
         </h1>
         {!isLoading && (
