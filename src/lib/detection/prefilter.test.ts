@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  alreadyHandled,
   MAX_MODEL_CHARS,
   SENDER_MUTE_AFTER,
   SENDER_PROBE_EVERY,
@@ -250,5 +251,27 @@ describe("shouldMuteSender", () => {
   it("lets every Nth email through as a probe", () => {
     expect(shouldMuteSender(history(3, 0, SENDER_PROBE_EVERY - 2))).toBe(true);
     expect(shouldMuteSender(history(3, 0, SENDER_PROBE_EVERY - 1))).toBe(false);
+  });
+});
+
+describe("alreadyHandled", () => {
+  it("stops Google Calendar's own invitation, update and cancellation mail", () => {
+    expect(alreadyHandled({ from: "calendar-notification@google.com", subject: "Updated invitation: ISAW/Annie projects @ Mon 1pm (Zoom)" })).toBe("own_calendar");
+    expect(alreadyHandled({ from: "Google Calendar <calendar-noreply@google.com>", subject: "Invitation: Weekly Eng Standup @ Mon Apr 20 10am" })).toBe("own_calendar");
+    expect(alreadyHandled({ from: "brianna@nyu.edu", subject: "Canceled event: UXUI meeting Annie & Brianna @ Thu 3pm" })).toBe("own_calendar");
+    expect(alreadyHandled({ from: "sophia@projectgarage.co", subject: "Accepted: Annie / Sophia Mock @ Sun Oct 19 11am" })).toBe("own_calendar");
+  });
+
+  it("stops reservation and booking confirmations", () => {
+    expect(alreadyHandled({ from: "reservations@resy.com", subject: "Confirmed: Singapore Social, Saturday at 6:00 PM for 2" })).toBe("reservation");
+    expect(alreadyHandled({ from: "La Boca <hello@sevenrooms.com>", subject: "Your reservation has been changed" })).toBe("reservation");
+    expect(alreadyHandled({ from: "bobst@nyu.libcal.com", subject: "Study room booking confirmed: Bobst LL2-15" })).toBe("reservation");
+  });
+
+  it("lets real invitations through", () => {
+    expect(alreadyHandled({ from: "qfs@nyu.edu", subject: "Optiver Info Session — Wednesday 7 PM" })).toBeNull();
+    expect(alreadyHandled({ from: "invites@supermomos.com", subject: "Elaine invited you: Design and Research in the Age of AI" })).toBeNull();
+    expect(alreadyHandled({ from: "hello@techatnyu.org", subject: "5 events in 6 days" })).toBeNull();
+    expect(alreadyHandled({ from: "wasserman@nyu.edu", subject: "Reserve your spot: Marshall Wace coffee chats" })).toBeNull();
   });
 });

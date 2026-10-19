@@ -72,6 +72,18 @@ beforeEach(() => {
 });
 
 describe("processEmail — tier order", () => {
+  it("tier 0: a Google Calendar invitation is skipped even though it carries ICS", async () => {
+    const ics = ["BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:own", "DTSTART:20990917T220000Z", "SUMMARY:Standup", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    const result = await processEmail(
+      "u1",
+      "e0",
+      message({ icsContent: ics, from: "Google Calendar <calendar-notification@google.com>", subject: "Invitation: Standup @ Mon 10am" })
+    );
+    expect(result).toMatchObject({ skip: "own_calendar", tier: null, created: 0 });
+    expect(db.event.create).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
+  });
+
   it("tier 1: an ICS attachment is parsed without a model call", async () => {
     const ics = [
       "BEGIN:VCALENDAR",

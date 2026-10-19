@@ -5,6 +5,7 @@ import { parseIcs } from "@/lib/detection/ics";
 import { parseSchemaOrg } from "@/lib/detection/schema";
 import { classifyKeyword } from "@/lib/detection/keyword";
 import {
+  alreadyHandled,
   contentHash,
   isBulk,
   isReplySubject,
@@ -70,6 +71,12 @@ export async function processEmail(
   emailId: string,
   msg: PipelineMessage
 ): Promise<PipelineResult> {
+  // Tier 0 — things the user already handled: Google Calendar's own
+  // invitation and cancellation mail, reservation confirmations. These carry
+  // ICS and structured markup, so the check has to come before tier 1.
+  const handled = alreadyHandled(msg);
+  if (handled) return skipped(handled);
+
   // Tier 1 — ICS
   if (msg.icsContent) {
     const events = parseIcs(msg.icsContent);

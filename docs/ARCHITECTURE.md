@@ -93,6 +93,16 @@ tiering is sound engineering, but today the model carries almost all of the
 recall. That is worth saying plainly in an interview rather than implying the
 parsers do most of the work.
 
+### Before any tier: things the user already handled
+
+Lumi is for invitations the user does not know about. Two kinds of mail look
+like events but are not: Google Calendar's own invitation, update and
+cancellation notices (Google already put the event on the calendar, or took
+it off), and reservation or booking confirmations (the user made the
+booking). `alreadyHandled` in `src/lib/detection/prefilter.ts` stops both
+before tier 1, because they carry ICS and structured markup that would
+otherwise produce a card. Reasons: `own_calendar`, `reservation`.
+
 ### Pre-filter rules
 
 All in `src/lib/detection/prefilter.ts`, applied in this order after the
