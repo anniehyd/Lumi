@@ -3,9 +3,10 @@ import type { MockEvent } from "@/lib/mock/events";
 /**
  * The two sentences the dashboard leads with.
  *
- * `summaryFor` is the per-event "Looks like …" line. The model writes one in
- * the extraction call; events from the parser tiers and the Handshake feed,
- * and older rows, get this template instead so no card is ever blank.
+ * `summaryFor` is the per-event one-liner (what the event is). The model
+ * writes one in the extraction call; events from the parser tiers and the
+ * Handshake feed, and older rows, get this template instead so no card is
+ * ever blank.
  *
  * `buildBrief` is the headline over the whole list ("Looks like it's gonna be
  * a busy week."). It is rule-based on purpose: it costs nothing, it is the
@@ -30,15 +31,13 @@ export function summaryFor(e: Summarizable): string {
   const host = e.organizerCompany ?? e.organizerName;
   const day = weekday(e.startTime, e.timezone);
   if (e.kind === "DEADLINE") {
-    return host
-      ? `Looks like ${host}'s deadline for ${e.title} lands on ${day}.`
-      : `Looks like a deadline, ${e.title}, lands on ${day}.`;
+    return host ? `${host}'s deadline for ${e.title}, due ${day}.` : `A deadline, ${e.title}, due ${day}.`;
   }
   const what =
-    e.kind === "COFFEE_CHAT" ? "a coffee chat" : e.kind === "INFO_SESSION" ? "an info session" : "an event";
-  const lead = host ? `Looks like ${host} is hosting ${what}` : `Looks like ${what}`;
-  const tail = e.confidence < 0.7 ? ", though Lumi isn't sure it's confirmed." : ".";
-  return `${lead}, ${e.title}, on ${day}${tail}`;
+    e.kind === "COFFEE_CHAT" ? "A coffee chat" : e.kind === "INFO_SESSION" ? "An info session" : "An event";
+  const lead = host ? `${what} hosted by ${host}` : what;
+  const tail = e.confidence < 0.7 ? ". Lumi isn't sure it's confirmed." : ".";
+  return `${lead} on ${day}${tail}`;
 }
 
 export type Brief = { headline: string; emphasis: string | null; subline: string };

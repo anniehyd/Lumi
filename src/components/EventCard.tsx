@@ -2,9 +2,7 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import type { MockEvent, MockEmail, EventStatus } from "@/lib/mock/events";
+import type { MockEvent, EventStatus } from "@/lib/mock/events";
 import { summaryFor } from "@/lib/brief";
 
 type Props = {
@@ -14,72 +12,55 @@ type Props = {
   onAction: (id: string, status: EventStatus) => void;
 };
 
-async function fetchEmail(id: string): Promise<MockEmail | null> {
-  const res = await fetch(`/api/emails/${id}`);
-  if (!res.ok) return null;
-  return ((await res.json()).email as MockEmail) ?? null;
-}
-
 function dayLabel(startISO: string, endISO?: string): string {
   const start = new Date(startISO);
   const day = start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const t = (d: Date) =>
-    d.toLocaleTimeString("en-US", { hour: "numeric", minute: d.getMinutes() ? "2-digit" : undefined }).replace(" ", " ");
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: d.getMinutes() ? "2-digit" : undefined });
   if (!endISO) return `${day} · ${t(start)}`;
   return `${day} · ${t(start)}–${t(new Date(endISO))}`;
 }
 
-function matchLabel(relevance: number): { text: string; tone: "mark" | "plain" | "faint" } {
-  if (relevance >= 4) return { text: "Strong match", tone: "mark" };
-  if (relevance === 3) return { text: "Fair match", tone: "plain" };
-  return { text: "Outside your lane", tone: "faint" };
-}
-
-const pillTone = {
-  mark: "bg-lumi-mark text-lumi-text",
-  plain: "bg-lumi-surface text-lumi-text",
-  faint: "bg-lumi-surface text-lumi-muted",
-  ink: "bg-lumi-text text-white",
-  rose: "bg-[#FFE4E4] text-lumi-rose",
-};
-
-function Pill({ tone, children }: { tone: keyof typeof pillTone; children: React.ReactNode }) {
+/** Five stars, filled to the relevance score. */
+function Stars({ value }: { value: number }) {
+  const v = Math.min(5, Math.max(1, Math.round(value)));
   return (
     <span
-      className={`rounded-full px-2.5 py-1 text-[13px] font-semibold transition-transform hover:-rotate-3 hover:scale-105 ${pillTone[tone]}`}
+      className="inline-flex items-center gap-0.5"
+      role="img"
+      aria-label={`${v} of 5 stars for you`}
+      title={`${v} of 5: how well this fits what you told Lumi you care about`}
     >
-      {children}
+      {[1, 2, 3, 4, 5].map((i) => (
+        <svg
+          key={i}
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className={i <= v ? "text-lumi-text" : "text-[#DDDBD5]"}
+          fill="currentColor"
+        >
+          <path d="M12 2.5l2.9 6.1 6.7.8-4.9 4.6 1.3 6.6L12 17.3l-6 3.3 1.3-6.6L2.4 9.4l6.7-.8L12 2.5z" />
+        </svg>
+      ))}
     </span>
   );
 }
 
 /**
- * One row of the decision list. The row leads with a plain-English sentence
- * ("Looks like …") rather than the raw title, because that sentence is what a
- * person actually needs to decide; the title and the source paragraph are
- * there when they want to check.
+ * One row of the decision list. What a person needs to decide, nothing
+ * else: title, when, where, who invited them, how well it fits (stars), one
+ * sentence on what it is, whether an RSVP is needed, and a red line only
+ * when it overlaps their calendar. The email itself lives one click away
+ * on the event page.
  */
 export function EventCard({ event, index, focused, onAction }: Props) {
-  const [expanded, setExpanded] = useState(false);
-  const { data: email } = useQuery({
-    queryKey: ["email", event.sourceEmailId],
-    queryFn: () => fetchEmail(event.sourceEmailId),
-    enabled: expanded && Boolean(event.sourceEmailId),
-    staleTime: Infinity,
-  });
-
-  // The focused row opens its source so the keyboard flow never needs the mouse.
-  useEffect(() => {
-    if (focused) setExpanded(true);
-  }, [focused]);
-
-  const relevance = event.relevance ?? 3;
-  const match = matchLabel(relevance);
-  const unsure = event.confidence < 0.7 && event.detectedVia !== "ICS";
   const deadline = event.kind === "DEADLINE";
   const primaryLabel = deadline ? "Remind me" : "Attend";
   const summary = event.summary ?? summaryFor(event);
   const host = event.organizerCompany ?? event.organizerName;
+  const sender = event.organizerName && event.organizerName !== host ? event.organizerName : null;
   const lead = focused || index === 0;
 
   return (
@@ -100,67 +81,73 @@ export function EventCard({ event, index, focused, onAction }: Props) {
         {String(index + 1).padStart(2, "0")}
       </div>
 
-      <div className="min-w-0 flex flex-col gap-3.5">
-        <div className="flex flex-wrap gap-2.5">
-          <Pill tone="ink">{dayLabel(event.startTime, event.endTime)}</Pill>
-          {deadline ? <Pill tone="plain">Deadline</Pill> : <Pill tone={match.tone}>{match.text}</Pill>}
-          {event.conflictTitle && <Pill tone="rose">Overlaps {event.conflictTitle}</Pill>}
-          {unsure && <Pill tone="faint">Not sure it’s an event</Pill>}
+      <div className="min-w-0 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Stars value={event.relevance ?? 3} />
+          {deadline && (
+            <span className="rounded-full bg-lumi-surface px-2.5 py-1 text-[12px] font-semibold text-lumi-text">Deadline</span>
+          )}
         </div>
 
-        <Link href={`/events/${event.id}`} className="inline-block">
+        <Link href={`/events/${event.id}`} className="inline-block" data-cursor="open" data-cursor-tone="ink">
           <h2
             className={`font-serif font-medium leading-[1.06] tracking-[-0.025em] text-lumi-text transition-colors hover:text-lumi-accent ${
-              lead ? "text-[34px] sm:text-[44px]" : "text-[28px] sm:text-[34px]"
+              lead ? "text-[32px] sm:text-[40px]" : "text-[26px] sm:text-[32px]"
             }`}
           >
             {event.title}
           </h2>
         </Link>
 
-        <p className={`text-lumi-text leading-relaxed ${lead ? "text-[17px]" : "text-base"}`}>
-          <em className="font-serif font-serif-soft text-[1.12em]">Looks like</em>{" "}
-          {summary.replace(/^looks like\s*/i, "")}
-        </p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[15px]">
+          <dt className="text-lumi-subtle">When</dt>
+          <dd className="font-semibold text-lumi-text tabular-nums">{dayLabel(event.startTime, event.endTime)}</dd>
+          {event.locationName && (
+            <>
+              <dt className="text-lumi-subtle">Where</dt>
+              <dd className="text-lumi-text">
+                {event.locationName}
+                {event.locationAddress && <span className="text-lumi-muted"> · {event.locationAddress}</span>}
+              </dd>
+            </>
+          )}
+          {host && (
+            <>
+              <dt className="text-lumi-subtle">Host</dt>
+              <dd className="text-lumi-text">
+                {host}
+                {sender && <span className="text-lumi-muted"> · invite via {sender}</span>}
+              </dd>
+            </>
+          )}
+        </dl>
 
-        {(event.locationName || host) && (
-          <p className="text-sm text-lumi-muted">
-            {[event.locationName, host && `hosted by ${host}`].filter(Boolean).join(" · ")}
+        <p className={`text-lumi-text leading-relaxed max-w-[62ch] ${lead ? "text-[17px]" : "text-base"}`}>{summary}</p>
+
+        {event.rsvpLink && (
+          <p className="text-[15px]">
+            <span className="font-semibold text-lumi-text">RSVP needed · </span>
+            <a
+              href={event.rsvpLink}
+              target="_blank"
+              rel="noreferrer"
+              data-cursor="rsvp"
+              data-cursor-tone="blue"
+              className="font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
+            >
+              {rsvpHost(event.rsvpLink)}
+            </a>
           </p>
         )}
 
-        {event.sourceEmailId && !expanded && (
-          <button
-            onClick={() => setExpanded(true)}
-            className="self-start text-[13px] font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
-          >
-            Show where this came from
-          </button>
-        )}
-
-        {expanded && email && (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-1 rounded-2xl bg-lumi-surface px-5 py-5 flex flex-col gap-2.5"
-          >
-            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-[13px] text-lumi-muted">
-              <span className="font-semibold text-lumi-text">From {email.fromName}</span>
-              <span>
-                “{email.subject}” ·{" "}
-                {new Date(email.receivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-              </span>
-            </div>
-            <p className="font-serif font-serif-soft text-[15px] leading-[1.6] text-[#3A3A3A] line-clamp-4 whitespace-pre-line">
-              {excerptFor(email.bodyText, event.title)}
-            </p>
-            <Link
-              href={`/events/${event.id}`}
-              className="self-start text-[13px] font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
-            >
-              Open the whole email
-            </Link>
-          </motion.div>
+        {event.conflictTitle && (
+          <p className="inline-flex items-center gap-2 self-start rounded-lg bg-[#FFE4E4] px-3 py-1.5 text-[14px] font-semibold text-lumi-rose">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v4M12 16h.01" />
+            </svg>
+            Overlaps {event.conflictTitle} on your calendar
+          </p>
         )}
       </div>
 
@@ -170,9 +157,7 @@ export function EventCard({ event, index, focused, onAction }: Props) {
           data-cursor={deadline ? "set a reminder" : "attend?"}
           data-cursor-tone={deadline ? "blue" : "mark"}
           className={`min-h-[46px] rounded-full px-5 text-sm font-semibold transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_10px_24px_-14px_rgba(17,17,17,0.45)] active:scale-[0.98] ${
-            lead
-              ? "bg-lumi-text text-white"
-              : "border-[1.5px] border-lumi-text bg-white text-lumi-text"
+            lead ? "bg-lumi-text text-white" : "border-[1.5px] border-lumi-text bg-white text-lumi-text"
           }`}
         >
           {primaryLabel}
@@ -199,25 +184,11 @@ export function EventCard({ event, index, focused, onAction }: Props) {
   );
 }
 
-/**
- * The paragraph of the email that mentions this event, so the panel reads as
- * "here is the line Lumi found" rather than a wall of newsletter.
- */
-function excerptFor(body: string, title: string): string {
-  const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  const words = title
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length > 3);
-  let best = paragraphs[0] ?? body;
-  let bestScore = 0;
-  for (const p of paragraphs) {
-    const lower = p.toLowerCase();
-    const score = words.filter((w) => lower.includes(w)).length;
-    if (score > bestScore) {
-      best = p;
-      bestScore = score;
-    }
+/** "nyu.joinhandshake.com" rather than a 90-character tracking URL. */
+function rsvpHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "open the RSVP link";
   }
-  return best.length > 420 ? best.slice(0, 417).trimEnd() + "…" : best;
 }

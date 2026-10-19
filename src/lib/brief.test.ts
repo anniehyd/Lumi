@@ -25,12 +25,12 @@ describe("summaryFor", () => {
   it("names the host and the kind", () => {
     expect(
       summaryFor(ev({ kind: "COFFEE_CHAT", title: "Coffee Chats", organizerCompany: "Marshall Wace" }))
-    ).toBe("Looks like Marshall Wace is hosting a coffee chat, Coffee Chats, on Sunday.");
+    ).toBe("A coffee chat hosted by Marshall Wace on Sunday.");
   });
 
   it("phrases deadlines as deadlines", () => {
     expect(summaryFor(ev({ kind: "DEADLINE", title: "Fellowship", organizerName: "NYU" }))).toBe(
-      "Looks like NYU's deadline for Fellowship lands on Sunday."
+      "NYU's deadline for Fellowship, due Sunday."
     );
   });
 

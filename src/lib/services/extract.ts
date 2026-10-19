@@ -127,7 +127,7 @@ const TOOL_SCHEMA = {
           summary: {
             type: "string" as const,
             description:
-              "One plain sentence that starts with \"Looks like\" and says who is doing what, for whom, in the user's own terms. Example: \"Looks like Wasserman is bringing Marshall Wace developers in for a coffee chat, aimed at students recruiting for tech.\" No marketing voice.",
+              "One plain sentence on what this event is. If a company or firm hosts it, say what that company does and what the event is for, e.g. \"Marshall Wace is a London hedge fund with a large technology team; this coffee chat is where their developers talk to students about internships.\" For a general event just say what happens there. No preamble, no marketing voice.",
           },
         },
         required: ["title", "startTime", "timezone", "confidence", "kind", "description", "relevance", "summary"],
@@ -162,7 +162,7 @@ Rules:
 - If no events, return an empty array.
 - Always infer a timezone. Default to the sender's likely timezone (e.g. US universities → America/New_York).
 - Confidence: 1.0 = explicit date + location + RSVP; 0.8 = date + title; <0.7 = ambiguous.
-- summary: one friendly sentence starting "Looks like", as if a sharp friend skimmed the email for the user. Mention the host and who it is for. Under 30 words.`;
+- summary: one plain sentence on what the event is. For a company-hosted event, say what the company does and what the event is for; for a general event, just what happens there. Under 35 words, no preamble.`;
 
 const LINK_RULE = `- Links in the email are shown as placeholders like [L1], [L2]. When an event
   has an RSVP or registration link, return its placeholder exactly as written

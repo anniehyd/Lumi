@@ -25,7 +25,7 @@ export type MockEvent = {
   sourceEmailId: string;
   relevance?: number; // 1..5 — fit to the user's interests
   conflictTitle?: string; // overlapping Google Calendar event, if any
-  summary?: string; // "Looks like …" one-liner shown on the card
+  summary?: string; // one sentence on what the event is, shown on the card
 };
 
 export type MockEmail = {
@@ -139,7 +139,8 @@ export const mockEvents: MockEvent[] = [
     relevance: 5,
     conflictTitle: "Linear Algebra Recitation",
     summary:
-      "Looks like Wasserman is bringing Marshall Wace developers in for a coffee chat, aimed squarely at students recruiting for tech.",
+      "Marshall Wace is a London hedge fund with a large technology team; this coffee chat is where their developers talk to students about internships.",
+    rsvpLink: "https://nyu.joinhandshake.com/events/marshall-wace-coffee-chats",
     timezone: "America/New_York",
     locationName: "Interview Room 4 — Wasserman Union Square",
     locationAddress: wassermanUnionSquare,
@@ -160,7 +161,7 @@ export const mockEvents: MockEvent[] = [
     endTime: inDays(3, 18),
     relevance: 2,
     summary:
-      "Looks like Weil, Gotshal & Manges is pitching Big Law careers to undergrads of every year.",
+      "Weil, Gotshal & Manges is a global law firm; this session walks through what a Big Law career path looks like, open to every class year.",
     timezone: "America/New_York",
     locationName: "Presentation Room B — Wasserman Center",
     locationAddress: wassermanUnionSquare,
@@ -180,7 +181,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(5, 23, 59),
     relevance: 3,
     summary:
-      "Looks like a fellowship application closes that night, with grants up to $5,000 for about 35 public-service projects.",
+      "NYU's Changemaker Fellowship funds about 35 students with grants up to $5,000 for public-service projects; this is the application deadline.",
     timezone: "America/New_York",
     organizerName: "NYU Changemaker Council",
     rsvpLink: "https://wasserman.nyu.edu/changemaker",
@@ -197,8 +198,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(8, 19, 30),
     endTime: inDays(8, 22),
     relevance: 1,
-    summary:
-      "Looks like a black-tie dinner invitation from Sam, in a private room, with an RSVP due Monday.",
+    summary: "A black-tie dinner Sam is hosting in a private room at Quince; reply by Monday so he can confirm the table.",
     timezone: "America/Los_Angeles",
     locationName: "Quince",
     locationAddress: "470 Pacific Ave, San Francisco, CA 94133",
