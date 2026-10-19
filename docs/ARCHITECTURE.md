@@ -221,6 +221,13 @@ share them, then length, then start, and names who is missing from the
 runs that fall one person short. Picking a time stores it on the poll and,
 for a signed-in owner, creates an accepted Event (`source: MEET`,
 `detectedVia: MANUAL`) that goes to Google Calendar through the usual sync.
+Everyone else gets the picked time from `GET /api/meet/<slug>/final.ics`
+(`src/lib/meetIcs.ts`, one VEVENT) or a Google Calendar template link built
+in the browser (`googleCalendarUrl`). The organizer may list who needs to
+answer (`MeetPoll.expected`); `stillWaiting` compares the list to the answers
+case-insensitively and the page and headline name who is missing. Link
+previews come from `src/app/meet/[slug]/layout.tsx`, a server layout whose
+`generateMetadata` reads the poll, since the page itself is a client component.
 
 Storage is `src/lib/meetStore.ts`: Prisma (`MeetPoll`, `MeetResponse`) with
 a database, otherwise an in-memory store seeded with one sample poll so demo

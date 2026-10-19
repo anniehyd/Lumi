@@ -18,6 +18,7 @@ export type NewPoll = {
   dayEnd: number;
   slotMinutes: number;
   timezone: string;
+  expected: string[];
   ownerId: string | null;
 };
 
@@ -52,6 +53,7 @@ type Row = {
   slotMinutes: number;
   finalStart: string | null;
   finalEnd: string | null;
+  expected: string[];
   ownerId: string | null;
   createdAt: Date;
 };
@@ -67,6 +69,7 @@ function rowToPoll(r: Row): Poll {
     slotMinutes: r.slotMinutes,
     finalStart: r.finalStart,
     finalEnd: r.finalEnd,
+    expected: r.expected,
     ownerId: r.ownerId,
     createdAt: r.createdAt.toISOString(),
   };
@@ -167,6 +170,7 @@ function seedDemo(): Map<string, MemPoll> {
     slotMinutes: 30,
     finalStart: null,
     finalEnd: null,
+    expected: [],
     ownerId: null,
     createdAt: new Date().toISOString(),
   };

@@ -6,7 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Nav } from "@/components/Nav";
 import { StarCursor } from "@/components/StarCursor";
-import { formatClock, formatDay, validatePollInput } from "@/lib/meet";
+import { formatClock, formatDay, parseExpected, validatePollInput } from "@/lib/meet";
 
 function isoDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -41,6 +41,8 @@ export default function NewPollPage() {
   const [startHour, setStartHour] = useState(9);
   const [endHour, setEndHour] = useState(21);
   const [slotMinutes, setSlotMinutes] = useState(30);
+  const [expectedRaw, setExpectedRaw] = useState("");
+  const expected = useMemo(() => parseExpected(expectedRaw), [expectedRaw]);
 
   const input = {
     title,
@@ -49,6 +51,7 @@ export default function NewPollPage() {
     dayEnd: endHour * 60,
     slotMinutes,
     timezone,
+    expected,
   };
   const problem = validatePollInput(input);
 
@@ -85,7 +88,7 @@ export default function NewPollPage() {
             <span className="w-2 h-2 rounded-full bg-lumi-accent" />
             A link for the group. Nobody else needs an account.
           </p>
-          <h1 className="animate-rise [animation-delay:200ms] font-serif text-[48px] sm:text-[72px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text">
+          <h1 className="animate-rise [animation-delay:200ms] font-serif text-[40px] sm:text-[56px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text">
             When can <span className="italic font-medium">everyone</span> make it?
           </h1>
         </section>
@@ -168,6 +171,23 @@ export default function NewPollPage() {
               </Select>
             </Field>
           </div>
+
+          <label className="flex flex-col gap-2">
+            <span className="flex items-baseline justify-between gap-4">
+              <span className="text-[15px] font-semibold text-lumi-text">Who needs to answer?</span>
+              <span className="text-sm text-lumi-muted">
+                {expected.length ? `${expected.length} ${expected.length === 1 ? "person" : "people"}` : "optional"}
+              </span>
+            </span>
+            <input
+              id="meet-expected"
+              value={expectedRaw}
+              onChange={(e) => setExpectedRaw(e.target.value)}
+              placeholder="Annie, Marco, Priya"
+              className="min-h-[52px] rounded-2xl bg-lumi-surface border-[1.5px] border-transparent px-5 text-[17px] text-lumi-text placeholder:text-lumi-subtle focus:border-lumi-text focus:outline-none"
+            />
+            <span className="text-sm text-lumi-muted">Names, separated by commas. The poll then shows who is still missing.</span>
+          </label>
 
           <div className="flex flex-wrap items-center gap-4">
             <button

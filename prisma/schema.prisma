@@ -312,6 +312,7 @@ model MeetPoll {
   slotMinutes Int      @default(30)
   finalStart  String? // slot key the owner picked
   finalEnd    String? // exclusive end slot key
+  expected    String[] @default([]) // names the organizer is waiting on, optional
   createdAt   DateTime @default(now())
 
   owner     User?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)

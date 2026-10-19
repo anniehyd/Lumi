@@ -3,11 +3,23 @@
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { CalendarPlus, Check, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { Nav } from "@/components/Nav";
 import { StarCursor } from "@/components/StarCursor";
 import { MeetGrid } from "@/components/MeetGrid";
-import { formatClock, formatDay, formatRange, parseKey, tally, type BestTime, type Poll, type Response } from "@/lib/meet";
+import {
+  formatClock,
+  formatDay,
+  formatRange,
+  googleCalendarUrl,
+  headline,
+  parseKey,
+  stillWaiting,
+  tally,
+  type BestTime,
+  type Poll,
+  type Response,
+} from "@/lib/meet";
 
 type PollPayload = { poll: Poll; responses: Response[]; best: BestTime[]; viewerIsOwner: boolean };
 
@@ -29,23 +41,6 @@ function writeIdentity(slug: string, id: { name: string; editToken: string }) {
     // Private window or blocked storage: the answer still saves, you just
     // have to retype your name next time.
   }
-}
-
-/** One sentence about where the group stands, in Lumi's voice. */
-function headline(best: BestTime[], total: number): { text: string; emphasis: string } {
-  if (total === 0) return { text: "Nobody has answered yet.", emphasis: "yet" };
-  if (total === 1) return { text: "One answer in. Share the link.", emphasis: "link" };
-  const top = best[0];
-  if (!top) return { text: "No overlap yet. Keep the answers coming.", emphasis: "overlap" };
-  if (top.count === total) return { text: `Looks like ${shortRange(top)} works for everyone.`, emphasis: "everyone" };
-  const who = top.missing.length === 1 ? `everyone but ${top.missing[0]}` : `${top.count} of ${total}`;
-  return { text: `Looks like ${shortRange(top)} works for ${who}.`, emphasis: who };
-}
-
-function shortRange(t: BestTime): string {
-  const s = parseKey(t.start)!.minutes;
-  const e = parseKey(t.end)!.minutes;
-  return `${formatDay(t.day).split(",")[0]} ${formatClock(s)}–${formatClock(e)}`;
 }
 
 export default function PollPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -122,8 +117,12 @@ export default function PollPage({ params }: { params: Promise<{ slug: string }>
 
   const counts = useMemo(() => (data ? tally(data.responses) : new Map<string, string[]>()), [data]);
   const total = data?.responses.length ?? 0;
-  const brief = useMemo(() => (data ? headline(data.best, total) : null), [data, total]);
+  const expected = data?.poll.expected ?? [];
+  const waiting = useMemo(() => (data ? stillWaiting(data.poll.expected, data.responses) : []), [data]);
+  const brief = useMemo(() => (data ? headline(data.best, total, waiting.length) : null), [data, total, waiting.length]);
   const final = data?.poll.finalStart && data.poll.finalEnd ? { start: data.poll.finalStart, end: data.poll.finalEnd } : null;
+  // Built in the browser so the link carries this page's own address.
+  const googleUrl = data && final ? googleCalendarUrl(data.poll, typeof window === "undefined" ? undefined : window.location.href) : null;
 
   async function copyLink() {
     try {
@@ -171,7 +170,7 @@ export default function PollPage({ params }: { params: Promise<{ slug: string }>
               {copied ? "Copied" : "Copy the link for the group"}
             </button>
           </p>
-          <h1 className="animate-rise [animation-delay:200ms] font-serif text-[40px] sm:text-[64px] font-normal leading-[1] tracking-[-0.03em] text-lumi-text max-w-[18ch]">
+          <h1 className="animate-rise [animation-delay:200ms] font-serif text-[36px] sm:text-[52px] font-normal leading-[1] tracking-[-0.03em] text-lumi-text max-w-[18ch]">
             {data?.poll.title ?? " "}
           </h1>
           {brief && (
@@ -180,15 +179,40 @@ export default function PollPage({ params }: { params: Promise<{ slug: string }>
             </p>
           )}
           {final && data && (
-            <div className="animate-rise [animation-delay:400ms] inline-flex flex-wrap items-center gap-3 self-start rounded-2xl bg-lumi-mark px-5 py-3 text-[15px] font-semibold text-lumi-text">
-              Picked: {formatRange({ day: parseKey(final.start)!.day, start: final.start, end: final.end })}
-              {data.viewerIsOwner && (
-                <button
-                  onClick={() => pick.mutate(null)}
-                  className="text-sm font-semibold underline underline-offset-[3px] opacity-70 hover:opacity-100"
+            <div className="animate-rise [animation-delay:400ms] flex flex-wrap items-center gap-3">
+              <div className="inline-flex flex-wrap items-center gap-3 rounded-2xl bg-lumi-mark px-5 py-3 text-[15px] font-semibold text-lumi-text">
+                Picked: {formatRange({ day: parseKey(final.start)!.day, start: final.start, end: final.end })}
+                {data.viewerIsOwner && (
+                  <button
+                    onClick={() => pick.mutate(null)}
+                    className="text-sm font-semibold underline underline-offset-[3px] opacity-70 hover:opacity-100"
+                  >
+                    undo
+                  </button>
+                )}
+              </div>
+              <a
+                href={`/api/meet/${slug}/final.ics`}
+                download={`${slug}.ics`}
+                data-cursor="add to calendar"
+                data-cursor-tone="mark"
+                className="inline-flex items-center gap-2 min-h-[44px] rounded-full bg-lumi-text px-5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5"
+              >
+                <CalendarPlus className="w-4 h-4" />
+                Add to my calendar
+              </a>
+              {googleUrl && (
+                <a
+                  href={googleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-cursor="open google"
+                  data-cursor-tone="blue"
+                  className="inline-flex items-center gap-2 min-h-[44px] rounded-full border-[1.5px] border-lumi-text bg-white px-5 text-sm font-semibold text-lumi-text transition-transform hover:-translate-y-0.5"
                 >
-                  undo
-                </button>
+                  <ExternalLink className="w-4 h-4" />
+                  Google Calendar
+                </a>
               )}
             </div>
           )}
@@ -260,6 +284,17 @@ export default function PollPage({ params }: { params: Promise<{ slug: string }>
                       : "Share the link to fill this in"}
                 </span>
               </div>
+              {expected.length > 0 && (
+                <p className="text-sm text-lumi-muted -mt-2">
+                  {waiting.length === 0 ? (
+                    <>Everyone on the list has answered.</>
+                  ) : (
+                    <>
+                      Still waiting on: <span className="font-semibold text-lumi-text">{waiting.join(", ")}</span>
+                    </>
+                  )}
+                </p>
+              )}
               <MeetGrid mode="heat" poll={data.poll} tally={counts} total={total} highlight={final} onHover={setHoverKey} />
 
               <div className="flex flex-col gap-3 pt-2">

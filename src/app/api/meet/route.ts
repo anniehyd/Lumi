@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getViewer } from "@/lib/apiAuth";
-import { validatePollInput } from "@/lib/meet";
+import { parseExpected, validatePollInput } from "@/lib/meet";
 import { meetStore } from "@/lib/meetStore";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,8 @@ export async function POST(req: Request) {
     dayEnd: Number(body.dayEnd),
     slotMinutes: Number(body.slotMinutes ?? 30),
     timezone: String(body.timezone),
+    // Optional "who needs to answer?" list; the same cleanup the form does.
+    expected: Array.isArray(body.expected) ? parseExpected((body.expected as string[]).join(",")) : [],
     ownerId: viewer.userId,
   });
   return NextResponse.json({ slug: poll.slug }, { status: 201 });
