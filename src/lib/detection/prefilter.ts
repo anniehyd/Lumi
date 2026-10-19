@@ -20,7 +20,11 @@ export type SkipReason =
   /** A reply whose new text carries no event language; the quoted part was already processed. */
   | "unchanged_thread"
   /** Bulk sender that has never produced an event for this user. */
-  | "sender_history";
+  | "sender_history"
+  /** A Google Calendar invitation, update or cancellation: already on the user's calendar. */
+  | "own_calendar"
+  /** A reservation or booking confirmation: the user made it themselves. */
+  | "reservation";
 
 // ─── Compaction ───
 
@@ -235,4 +239,35 @@ export function prefilter(msg: PrefilterInput): { pass: true } | { pass: false; 
   const withoutUrls = `${msg.subject}\n${msg.bodyText.replace(URL_RE, " ")}`;
   if (!hasTemporalSignal(withoutUrls)) return { pass: false, reason: "no_temporal" };
   return { pass: true };
+}
+
+// ─── Already yours ───
+
+/**
+ * Lumi is for invitations the user does not know about yet. Two kinds of
+ * mail look like events but are things the user already handled, so they
+ * are stopped before any tier runs, ICS attachment or not:
+ *
+ *   own_calendar  Google Calendar's own invitation, update and cancellation
+ *                 mail. Google already put the event on the calendar (or
+ *                 took it off); a card would only ask the user to decide
+ *                 something they decided when they accepted.
+ *   reservation   Restaurant, room and ticket confirmations. The user made
+ *                 the booking; the confirmation is a receipt.
+ */
+const CALENDAR_SENDERS = /@(calendar-notification\.google\.com|calendar-noreply\.google\.com|calendar-server\.bounces\.google\.com|google\.com)$/i;
+const CALENDAR_SUBJECT =
+  /^(fwd?:\s*)?(invitation|updated invitation|new event|canceled event|cancelled event|accepted|declined|tentatively accepted|proposed new time)\b.*@/i;
+const RESERVATION_SENDERS = /@(resy\.com|opentable\.com|sevenrooms\.com|tock\.com|libcal\.com|bookings?\.[^.]+\.[a-z]+)$/i;
+const RESERVATION_SUBJECT =
+  /\b(reservation|booking|table|study room|room booking)\b.*\b(confirmed|confirmation|changed|updated|modified|cancell?ed|reminder)\b|^(confirmed|your (reservation|booking|table))\b/i;
+
+export function alreadyHandled(msg: { from: string; subject: string }): SkipReason | null {
+  const sender = senderAddress(msg.from);
+  const subject = msg.subject.trim();
+  if (CALENDAR_SENDERS.test(sender) && /calendar/i.test(sender)) return "own_calendar";
+  if (CALENDAR_SUBJECT.test(subject)) return "own_calendar";
+  if (RESERVATION_SENDERS.test(sender)) return "reservation";
+  if (RESERVATION_SUBJECT.test(subject)) return "reservation";
+  return null;
 }

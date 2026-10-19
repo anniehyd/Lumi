@@ -55,6 +55,8 @@ const skipped: Record<SkipReason, number> = {
   duplicate: 0,
   unchanged_thread: 0,
   sender_history: 0,
+  own_calendar: 0,
+  reservation: 0,
 };
 const lost: { reason: SkipReason; domain: string; events: number }[] = [];
 
