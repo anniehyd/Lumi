@@ -61,6 +61,7 @@ model User {
   profile          Json?
   accounts         Account[]
   sessions         Session[]
+  polls            MeetPoll[]
   emails           Email[]
   events           Event[]
   misses           Miss[]
@@ -257,6 +258,7 @@ enum EventStatus {
 enum EventSource {
   EMAIL
   HANDSHAKE
+  MEET // picked from a group scheduling poll
 }
 
 enum DetectionMethod {
@@ -264,6 +266,7 @@ enum DetectionMethod {
   SCHEMA_ORG
   KEYWORD
   LLM
+  MANUAL // created by the user, no detection involved
 }
 
 enum LocationType {
@@ -289,4 +292,46 @@ model LlmUsage {
 
   @@index([createdAt])
   @@index([model, createdAt])
+}
+
+// ─── Group scheduling (When2meet-style) ───
+
+/// A "when are you free?" poll. The grid is days × time slots in the poll's
+/// own time zone; slot keys are local wall-clock strings (2026-10-20T14:30)
+/// so every participant paints the same grid. Only the owner (or anyone, in
+/// demo mode) can pick the final time.
+model MeetPoll {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  ownerId     String?
+  title       String
+  timezone    String   @default("America/New_York")
+  days        String[] // YYYY-MM-DD, in order
+  dayStart    Int // minutes after midnight, e.g. 540 = 9:00
+  dayEnd      Int // minutes after midnight, e.g. 1260 = 21:00
+  slotMinutes Int      @default(30)
+  finalStart  String? // slot key the owner picked
+  finalEnd    String? // exclusive end slot key
+  createdAt   DateTime @default(now())
+
+  owner     User?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  responses MeetResponse[]
+
+  @@index([ownerId, createdAt])
+}
+
+/// One participant's painted availability. No account needed: the edit token
+/// (kept in their browser) is what lets them change their own answer later.
+model MeetResponse {
+  id        String   @id @default(cuid())
+  pollId    String
+  name      String
+  editToken String   @unique
+  slots     String[] // slot keys the person is free for
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  poll MeetPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, name])
 }

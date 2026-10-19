@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Nav } from "@/components/Nav";
 import { StarCursor } from "@/components/StarCursor";
 import type { MockEvent } from "@/lib/mock/events";
+import { formatRange, parseKey, type Poll } from "@/lib/meet";
 
 type View = "month" | "week";
 
@@ -15,6 +16,13 @@ async function fetchEvents(): Promise<MockEvent[]> {
   if (!res.ok) throw new Error("failed");
   const data = await res.json();
   return data.events as MockEvent[];
+}
+
+type PollRow = Poll & { responseCount: number };
+async function fetchPolls(): Promise<PollRow[]> {
+  const res = await fetch("/api/meet");
+  if (!res.ok) return [];
+  return ((await res.json()).polls as PollRow[]) ?? [];
 }
 
 /**
@@ -26,6 +34,7 @@ export default function CalendarPage() {
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState(() => new Date());
   const { data: allEvents = [] } = useQuery({ queryKey: ["events"], queryFn: fetchEvents });
+  const { data: polls = [] } = useQuery({ queryKey: ["meet-list"], queryFn: fetchPolls });
 
   const visible = useMemo(
     () => allEvents.filter((e) => e.status === "ACCEPTED" || e.status === "PENDING" || e.status === "MAYBE"),
@@ -59,6 +68,14 @@ export default function CalendarPage() {
           </div>
 
           <div className="animate-rise [animation-delay:320ms] flex flex-wrap items-center gap-3">
+            <Link
+              href="/meet/new"
+              data-cursor="find a time"
+              data-cursor-tone="mark"
+              className="inline-flex items-center min-h-[44px] rounded-full bg-lumi-text px-5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5"
+            >
+              Find a time with others →
+            </Link>
             <div className="inline-flex rounded-full bg-lumi-surface p-1">
               {(["month", "week"] as View[]).map((v) => (
                 <button
@@ -108,6 +125,36 @@ export default function CalendarPage() {
             <WeekGrid cursor={cursor} events={visible} />
           )}
         </div>
+
+        {polls.length > 0 && (
+          <section className="flex flex-col gap-4 border-t border-lumi-border pt-8">
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className="font-serif text-[28px] font-medium leading-[1.1] tracking-[-0.02em]">Group polls</h2>
+              <Link href="/meet/new" className="text-sm font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text">
+                New poll
+              </Link>
+            </div>
+            <ul className="divide-y divide-lumi-border border-t border-b border-lumi-border">
+              {polls.map((p) => (
+                <li key={p.slug}>
+                  <Link
+                    href={`/meet/${p.slug}`}
+                    data-cursor="open poll"
+                    data-cursor-tone="ink"
+                    className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-4 text-lumi-text hover:text-lumi-accent transition-colors"
+                  >
+                    <span className="font-semibold text-[15px]">{p.title}</span>
+                    <span className="text-sm text-lumi-muted">
+                      {p.finalStart && p.finalEnd
+                        ? `Picked · ${formatRange({ day: parseKey(p.finalStart)!.day, start: p.finalStart, end: p.finalEnd })}`
+                        : `${p.responseCount} answer${p.responseCount === 1 ? "" : "s"} · ${p.days.length} day${p.days.length === 1 ? "" : "s"}`}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-lumi-muted">
           <span className="inline-flex items-center gap-2">

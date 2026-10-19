@@ -3,7 +3,7 @@
 // deadlines + non-event announcements to filter out.
 
 export type EventStatus = "PENDING" | "ACCEPTED" | "MAYBE" | "DECLINED";
-export type DetectionMethod = "ICS" | "SCHEMA_ORG" | "KEYWORD" | "LLM";
+export type DetectionMethod = "ICS" | "SCHEMA_ORG" | "KEYWORD" | "LLM" | "MANUAL";
 export type EventKind = "MEETING" | "INFO_SESSION" | "DEADLINE" | "COFFEE_CHAT";
 
 export type MockEvent = {

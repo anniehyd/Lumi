@@ -205,6 +205,27 @@ Two modes, chosen by `INGEST_MODE`:
 `npm run worker` still works in inline mode: it is then just a timer that calls
 the same sweep, useful for the single-box Docker deployment in `DEPLOY.md`.
 
+## Group scheduling (When2meet-style)
+
+`/meet/new` makes a poll: a title, a set of days, a daily window and a slot
+length. The link `/meet/<slug>` needs no account: anyone with it paints the
+slots they are free for and saves under a name. The first save returns an
+edit token, kept in that browser, and later saves under the same name must
+present it, so nobody can overwrite someone else's answer.
+
+Slot keys are wall-clock strings in the poll's time zone (`2026-10-27T16:00`),
+so every participant sees the same grid; `keyToDate` converts the chosen
+time to a real instant only when the owner picks it. `bestTimes` in
+`src/lib/meet.ts` ranks maximal runs of consecutive slots by how many people
+share them, then length, then start, and names who is missing from the
+runs that fall one person short. Picking a time stores it on the poll and,
+for a signed-in owner, creates an accepted Event (`source: MEET`,
+`detectedVia: MANUAL`) that goes to Google Calendar through the usual sync.
+
+Storage is `src/lib/meetStore.ts`: Prisma (`MeetPoll`, `MeetResponse`) with
+a database, otherwise an in-memory store seeded with one sample poll so demo
+mode has something to show.
+
 ## Failure handling
 
 | Failure | What happens |

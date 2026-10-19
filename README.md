@@ -164,6 +164,10 @@ All keys live in `.env.example`. Summary:
 | `POST/DELETE  /api/events/[id]/sync` | Write/remove from Google Calendar     |
 | `GET  /api/calendar.ics?token=…` | Per-user iCal feed (accepted + maybe)     |
 | `GET/POST /api/calendar-feed`    | Mint / rotate the signed-in user's feed link |
+| `POST /api/meet`                 | Create a group scheduling poll            |
+| `GET  /api/meet/[slug]`          | Poll, every answer, ranked common times   |
+| `PUT  /api/meet/[slug]/respond`  | Save one person's free slots (no account) |
+| `POST /api/meet/[slug]/final`    | Owner picks the time; synced to Calendar  |
 | `GET  /api/emails/[id]`          | Single email (source of an event)         |
 | `GET  /api/sync/status`          | Ingest health + DB connectivity           |
 | `GET  /api/metrics`              | Signed-in user's funnel (`?days=7`)       |
