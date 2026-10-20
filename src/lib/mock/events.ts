@@ -373,7 +373,7 @@ export const mockEvents: MockEvent[] = [
   },
   {
     id: "evt_quince_dinner",
-    status: "PENDING",
+    status: "DECLINED",
     confidence: 0.91,
     detectedVia: "LLM",
     kind: "MEETING",
@@ -411,7 +411,7 @@ export const mockEvents: MockEvent[] = [
   },
   {
     id: "evt_buildathon",
-    status: "PENDING",
+    status: "ACCEPTED",
     confidence: 0.95,
     detectedVia: "LLM",
     kind: "MEETING",
@@ -430,7 +430,7 @@ export const mockEvents: MockEvent[] = [
   },
   {
     id: "evt_design_crit",
-    status: "PENDING",
+    status: "DECLINED",
     confidence: 0.82,
     detectedVia: "LLM",
     kind: "MEETING",
@@ -467,7 +467,7 @@ export const mockEvents: MockEvent[] = [
   },
   {
     id: "evt_fixed_income",
-    status: "PENDING",
+    status: "DECLINED",
     confidence: 0.86,
     detectedVia: "LLM",
     kind: "MEETING",
@@ -484,7 +484,7 @@ export const mockEvents: MockEvent[] = [
   },
   {
     id: "evt_morgan_stanley",
-    status: "PENDING",
+    status: "DECLINED",
     confidence: 0.9,
     detectedVia: "LLM",
     kind: "INFO_SESSION",
@@ -522,7 +522,7 @@ export const mockEvents: MockEvent[] = [
   },
   {
     id: "evt_cryptomondays",
-    status: "PENDING",
+    status: "DECLINED",
     confidence: 0.93,
     detectedVia: "SCHEMA_ORG",
     kind: "MEETING",
@@ -578,7 +578,7 @@ export const mockEvents: MockEvent[] = [
   },
   {
     id: "evt_msg_showcase",
-    status: "PENDING",
+    status: "DECLINED",
     confidence: 0.94,
     detectedVia: "LLM",
     kind: "INFO_SESSION",
