@@ -8,6 +8,7 @@ import { Nav } from "@/components/Nav";
 import { StarCursor } from "@/components/StarCursor";
 import type { MockEvent } from "@/lib/mock/events";
 import { formatRange, parseKey, type Poll } from "@/lib/meet";
+import { CATEGORY_LABEL, mergeItems, type CalendarCategory, type CalendarItem } from "@/lib/calendarItems";
 
 type View = "schedule" | "month" | "week";
 
@@ -18,6 +19,12 @@ async function fetchEvents(): Promise<MockEvent[]> {
   return data.events as MockEvent[];
 }
 
+async function fetchItems(): Promise<{ items: CalendarItem[]; source: string }> {
+  const res = await fetch("/api/calendar/items?days=42");
+  if (!res.ok) return { items: [], source: "none" };
+  return (await res.json()) as { items: CalendarItem[]; source: string };
+}
+
 type PollRow = Poll & { responseCount: number };
 async function fetchPolls(): Promise<PollRow[]> {
   const res = await fetch("/api/meet");
@@ -26,31 +33,30 @@ async function fetchPolls(): Promise<PollRow[]> {
 }
 
 /**
- * The calendar.
+ * The calendar: only what is really on it. Your own Google Calendar
+ * (classes, yoga, coffee chats) and the events you accepted in Lumi. Nothing
+ * undecided, nothing that already happened. The default is a schedule with
+ * full titles; month and week grids are there for orientation.
  *
- * A student has a handful of events a week, not forty, so the default view
- * is a schedule: every day that has something, with the full title, time and
- * place readable at a glance. The month grid stays for orientation (titles
- * wrap instead of being cut), and the week grid for seeing clashes.
- *
- * Status is carried by shape: a solid ink dot or block is on Google
- * Calendar, an outline is still waiting for a decision, light blue is maybe.
+ * Colour carries the category: classes blue, personal time green, coffee
+ * chats yellow, Lumi's accepted events in ink, deadlines red.
  */
 export default function CalendarPage() {
   const [view, setView] = useState<View>("schedule");
   const [cursor, setCursor] = useState(() => new Date());
   const { data: allEvents = [] } = useQuery({ queryKey: ["events"], queryFn: fetchEvents });
+  const { data: own } = useQuery({ queryKey: ["calendar-items"], queryFn: fetchItems, refetchInterval: 5 * 60_000 });
   const { data: polls = [] } = useQuery({ queryKey: ["meet-list"], queryFn: fetchPolls });
 
-  const visible = useMemo(
-    () =>
-      allEvents
-        .filter((e) => e.status === "ACCEPTED" || e.status === "PENDING" || e.status === "MAYBE")
-        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-    [allEvents]
-  );
-  const accepted = visible.filter((e) => e.status === "ACCEPTED").length;
-  const undecided = visible.length - accepted;
+  const now = Date.now();
+  const items = useMemo(() => {
+    const accepted = allEvents.filter((e) => e.status === "ACCEPTED");
+    return mergeItems(own?.items ?? [], accepted).filter((i) => new Date(i.end).getTime() > now);
+  }, [allEvents, own, now]);
+  const fromLumi = items.filter((i) => i.source === "lumi").length;
+  const undecided = allEvents.filter(
+    (e) => (e.status === "PENDING" || e.status === "MAYBE") && new Date(e.startTime).getTime() > now
+  ).length;
 
   const title =
     view === "month"
@@ -68,9 +74,17 @@ export default function CalendarPage() {
       <main className="flex-1 w-full max-w-6xl mx-auto px-6 sm:px-10 pt-10 sm:pt-14 pb-24 flex flex-col gap-10">
         <section className="flex flex-wrap items-end justify-between gap-6">
           <div className="flex flex-col gap-3">
-            <p className="animate-rise [animation-delay:80ms] inline-flex items-center gap-2.5 text-sm text-lumi-muted">
+            <p className="animate-rise [animation-delay:80ms] inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-lumi-muted">
               <span className="w-2 h-2 rounded-full bg-lumi-accent" />
-              {accepted} on your calendar · {undecided} still to decide
+              {items.length} coming up · {fromLumi} accepted in Lumi
+              {undecided > 0 && (
+                <>
+                  {" · "}
+                  <Link href="/dashboard" className="text-lumi-text font-semibold underline underline-offset-[3px]">
+                    {undecided} still to decide
+                  </Link>
+                </>
+              )}
             </p>
             <h1 className="animate-rise [animation-delay:200ms] font-serif text-[40px] sm:text-[56px] font-normal leading-[0.98] tracking-[-0.03em] text-lumi-text">
               {title}
@@ -132,10 +146,12 @@ export default function CalendarPage() {
         </section>
 
         <div className="animate-rise [animation-delay:420ms]">
-          {view === "schedule" && <Schedule events={visible} />}
-          {view === "month" && <MonthGrid cursor={cursor} events={visible} />}
-          {view === "week" && <WeekGrid cursor={cursor} events={visible} />}
+          {view === "schedule" && <Schedule items={items} />}
+          {view === "month" && <MonthGrid cursor={cursor} items={items} />}
+          {view === "week" && <WeekGrid cursor={cursor} items={items} />}
         </div>
+
+        <Legend />
 
         {polls.length > 0 && (
           <section className="flex flex-col gap-4 border-t border-lumi-border pt-8">
@@ -166,37 +182,37 @@ export default function CalendarPage() {
             </ul>
           </section>
         )}
-
-        <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-lumi-muted">
-          <span className="inline-flex items-center gap-2">
-            <span className="w-3.5 h-3.5 rounded-full bg-lumi-text" /> on Google Calendar
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-lumi-text bg-white" /> waiting for your decision
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <span className="w-3.5 h-3.5 rounded-full bg-[#DCE3FF]" /> maybe
-          </span>
-        </p>
       </main>
     </div>
   );
 }
 
-/* ─── Status marks ─── */
+/* ─── Colour by category ─── */
 
-function Dot({ status, className = "" }: { status: MockEvent["status"]; className?: string }) {
-  const tone =
-    status === "ACCEPTED"
-      ? "bg-lumi-text"
-      : status === "MAYBE"
-        ? "bg-[#DCE3FF]"
-        : "bg-white border-[1.5px] border-lumi-text";
-  return <span aria-hidden="true" className={`inline-block w-3 h-3 rounded-full shrink-0 ${tone} ${className}`} />;
+const TONE: Record<CalendarCategory, { block: string; dot: string; text: string }> = {
+  class: { block: "bg-[#DCE3FF] text-[#1F2E8A]", dot: "bg-[#2B4BFF]", text: "text-[#2B4BFF]" },
+  personal: { block: "bg-[#DDF3E4] text-[#1F5A32]", dot: "bg-[#2E7D32]", text: "text-[#2E7D32]" },
+  coffee: { block: "bg-lumi-mark text-lumi-text", dot: "bg-[#D9B800]", text: "text-[#8A7400]" },
+  lumi: { block: "bg-lumi-text text-white", dot: "bg-lumi-text", text: "text-lumi-text" },
+  deadline: { block: "bg-[#FFE4E4] text-lumi-rose", dot: "bg-lumi-rose", text: "text-lumi-rose" },
+  other: { block: "bg-lumi-surface text-lumi-text", dot: "bg-lumi-subtle", text: "text-lumi-muted" },
+};
+
+function Dot({ category, className = "" }: { category: CalendarCategory; className?: string }) {
+  return <span aria-hidden="true" className={`inline-block w-3 h-3 rounded-full shrink-0 ${TONE[category].dot} ${className}`} />;
 }
 
-function statusWord(status: MockEvent["status"]): string {
-  return status === "ACCEPTED" ? "On your calendar" : status === "MAYBE" ? "Maybe" : "To decide";
+function Legend() {
+  const order: CalendarCategory[] = ["lumi", "class", "coffee", "personal", "deadline"];
+  return (
+    <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-lumi-muted">
+      {order.map((c) => (
+        <span key={c} className="inline-flex items-center gap-2">
+          <Dot category={c} /> {CATEGORY_LABEL[c]}
+        </span>
+      ))}
+    </p>
+  );
 }
 
 function timeOf(iso: string): string {
@@ -204,32 +220,52 @@ function timeOf(iso: string): string {
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: d.getMinutes() ? "2-digit" : undefined });
 }
 
-function timeSpan(e: MockEvent): string {
-  return e.endTime ? `${timeOf(e.startTime)}–${timeOf(e.endTime)}` : timeOf(e.startTime);
+function timeSpan(i: CalendarItem): string {
+  return `${timeOf(i.start)}–${timeOf(i.end)}`;
+}
+
+/** Items are links when they are Lumi's; Google entries are just text. */
+function ItemLink({
+  item,
+  className,
+  style,
+  children,
+}: {
+  item: CalendarItem;
+  className: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  if (item.eventId) {
+    return (
+      <Link href={`/events/${item.eventId}`} data-cursor="open" data-cursor-tone="ink" className={className} style={style}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <div className={className} style={style}>
+      {children}
+    </div>
+  );
 }
 
 /* ─── Schedule: the default ─── */
 
-function Schedule({ events }: { events: MockEvent[] }) {
+function Schedule({ items }: { items: CalendarItem[] }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const horizon = new Date(today);
-  horizon.setDate(today.getDate() + 42);
   const todayKey = dayKey(today);
   const thisWeek = weekStart(today).getTime();
 
-  // Every day in the next six weeks that has something, plus today itself.
-  const byDay = new Map<string, MockEvent[]>();
-  for (const e of events) {
-    const d = new Date(e.startTime);
-    if (d < today || d > horizon) continue;
-    const k = dayKey(d);
-    byDay.set(k, [...(byDay.get(k) ?? []), e]);
+  const byDay = new Map<string, CalendarItem[]>();
+  for (const i of items) {
+    const k = dayKey(new Date(i.start));
+    byDay.set(k, [...(byDay.get(k) ?? []), i]);
   }
   if (!byDay.has(todayKey)) byDay.set(todayKey, []);
-  const days = [...byDay.keys()].sort();
+  const days = [...byDay.keys()].sort((a, b) => keyToDate(a).getTime() - keyToDate(b).getTime());
 
-  // A header per week, in words rather than dates where that reads better.
   const weekLabel = (day: Date) => {
     const ws = weekStart(day).getTime();
     const diff = Math.round((ws - thisWeek) / (7 * 86_400_000));
@@ -243,15 +279,12 @@ function Schedule({ events }: { events: MockEvent[] }) {
     })}`;
   };
 
-  const later = events.filter((e) => new Date(e.startTime) > horizon).length;
   let lastWeek = "";
-
   return (
     <div className="flex flex-col">
       {days.map((k) => {
-        const [y, m, d] = k.split("-").map(Number);
-        const date = new Date(y, m, d);
-        const dayEvents = byDay.get(k) ?? [];
+        const date = keyToDate(k);
+        const dayItems = byDay.get(k) ?? [];
         const isToday = k === todayKey;
         const label = weekLabel(date);
         const showWeek = label !== lastWeek;
@@ -276,33 +309,29 @@ function Schedule({ events }: { events: MockEvent[] }) {
               </div>
 
               <ul className="flex flex-col divide-y divide-lumi-border -my-2">
-                {dayEvents.length === 0 && (
-                  <li className="py-2 text-[15px] text-lumi-muted">Nothing on the calendar.</li>
-                )}
-                {dayEvents.map((e) => (
-                  <li key={e.id}>
-                    <Link
-                      href={`/events/${e.id}`}
-                      data-cursor="open"
-                      data-cursor-tone="ink"
+                {dayItems.length === 0 && <li className="py-2 text-[15px] text-lumi-muted">Nothing on the calendar.</li>}
+                {dayItems.map((i) => (
+                  <li key={i.id}>
+                    <ItemLink
+                      item={i}
                       className="group grid grid-cols-[auto_1fr] sm:grid-cols-[auto_150px_1fr] gap-x-4 gap-y-1 items-start py-3 text-lumi-text"
                     >
-                      <Dot status={e.status} className="mt-[7px]" />
-                      <span className="text-[15px] font-semibold tabular-nums sm:text-lumi-muted sm:font-medium">
-                        {timeSpan(e)}
-                      </span>
+                      <Dot category={i.category} className="mt-[7px]" />
+                      <span className="text-[15px] font-semibold tabular-nums sm:text-lumi-muted sm:font-medium">{timeSpan(i)}</span>
                       <span className="col-start-2 sm:col-start-3 min-w-0 flex flex-col gap-0.5">
-                        <span className="font-serif text-[22px] sm:text-[24px] font-medium leading-[1.15] tracking-[-0.015em] group-hover:text-lumi-accent transition-colors">
-                          {e.title}
+                        <span
+                          className={`font-serif font-medium leading-[1.15] tracking-[-0.015em] transition-colors ${
+                            i.source === "lumi" ? "text-[22px] sm:text-[24px] group-hover:text-lumi-accent" : "text-[19px] sm:text-[20px]"
+                          }`}
+                        >
+                          {i.title}
                         </span>
                         <span className="text-sm text-lumi-muted">
-                          {[e.locationName, e.organizerCompany ?? e.organizerName].filter(Boolean).join(" · ")}
-                          {(e.locationName || e.organizerCompany || e.organizerName) && " · "}
-                          <span className={e.status === "PENDING" ? "text-lumi-text font-semibold" : ""}>{statusWord(e.status)}</span>
-                          {e.conflictTitle && <span className="text-lumi-rose"> · overlaps {e.conflictTitle}</span>}
+                          {i.location && `${i.location} · `}
+                          <span className={`font-semibold ${TONE[i.category].text}`}>{CATEGORY_LABEL[i.category]}</span>
                         </span>
                       </span>
-                    </Link>
+                    </ItemLink>
                   </li>
                 ))}
               </ul>
@@ -311,9 +340,7 @@ function Schedule({ events }: { events: MockEvent[] }) {
         );
       })}
       <div className="border-t border-lumi-border pt-5 text-sm text-lumi-muted">
-        {later > 0
-          ? `${later} more after that. Switch to Month to see further out.`
-          : "That is everything for the next six weeks."}
+        That is everything for the next six weeks. Past days are gone; this page only looks forward.
       </div>
     </div>
   );
@@ -321,7 +348,7 @@ function Schedule({ events }: { events: MockEvent[] }) {
 
 /* ─── Month ─── */
 
-function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
+function MonthGrid({ cursor, items }: { cursor: Date; items: CalendarItem[] }) {
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
   const first = new Date(year, month, 1);
@@ -333,12 +360,14 @@ function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
   for (let d = 1; d <= lastDay; d++) cells.push(new Date(year, month, d));
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const byDay = new Map<string, MockEvent[]>();
-  for (const e of events) {
-    const k = dayKey(new Date(e.startTime));
-    byDay.set(k, [...(byDay.get(k) ?? []), e]);
+  const byDay = new Map<string, CalendarItem[]>();
+  for (const i of items) {
+    const k = dayKey(new Date(i.start));
+    byDay.set(k, [...(byDay.get(k) ?? []), i]);
   }
-  const todayKey = dayKey(new Date());
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayKey = dayKey(today);
 
   return (
     <div className="overflow-x-auto -mx-6 sm:mx-0 px-6 sm:px-0">
@@ -352,12 +381,13 @@ function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
         </div>
         <div className="grid grid-cols-7">
           {cells.map((day, i) => {
-            if (!day) return <div key={i} className="min-h-[120px] border-b border-lumi-border" />;
+            if (!day) return <div key={i} className="min-h-[124px] border-b border-lumi-border" />;
             const key = dayKey(day);
-            const dayEvents = byDay.get(key) ?? [];
+            const past = day < today;
+            const dayItems = past ? [] : (byDay.get(key) ?? []);
             const isToday = key === todayKey;
             return (
-              <div key={i} className="min-h-[120px] border-b border-lumi-border py-2.5 pr-3 flex flex-col gap-2">
+              <div key={i} className={`min-h-[124px] border-b border-lumi-border py-2.5 pr-2.5 flex flex-col gap-2 ${past ? "opacity-40" : ""}`}>
                 <div
                   className={`font-serif font-serif-soft text-[20px] leading-none w-8 h-8 inline-flex items-center justify-center rounded-full ${
                     isToday ? "bg-lumi-accent text-white" : "text-lumi-text"
@@ -365,21 +395,16 @@ function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
                 >
                   {day.getDate()}
                 </div>
-                <ul className="flex flex-col gap-1.5">
-                  {dayEvents.map((e) => (
-                    <li key={e.id}>
-                      <Link
-                        href={`/events/${e.id}`}
-                        data-cursor="open"
-                        data-cursor-tone="ink"
-                        className="flex items-start gap-1.5 text-[12.5px] leading-[1.3] text-lumi-text hover:text-lumi-accent transition-colors"
+                <ul className="flex flex-col gap-1">
+                  {dayItems.map((it) => (
+                    <li key={it.id}>
+                      <ItemLink
+                        item={it}
+                        className={`block rounded-md px-2 py-1 text-[12px] leading-[1.3] transition-opacity hover:opacity-85 ${TONE[it.category].block}`}
                       >
-                        <Dot status={e.status} className="mt-[3px] !w-2.5 !h-2.5" />
-                        <span className="min-w-0">
-                          <span className="text-lumi-muted tabular-nums">{timeOf(e.startTime)}</span>{" "}
-                          <span className="font-semibold line-clamp-2">{e.title}</span>
-                        </span>
-                      </Link>
+                        <span className="opacity-70 tabular-nums">{timeOf(it.start)}</span>{" "}
+                        <span className="font-semibold line-clamp-2">{it.title}</span>
+                      </ItemLink>
                     </li>
                   ))}
                 </ul>
@@ -394,31 +419,23 @@ function MonthGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
 
 /* ─── Week ─── */
 
-function WeekGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
+function WeekGrid({ cursor, items }: { cursor: Date; items: CalendarItem[] }) {
   const start = weekStart(cursor);
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     return d;
   });
-  const hours = Array.from({ length: 14 }, (_, i) => 8 + i); // 8 AM – 9 PM
+  const hours = Array.from({ length: 15 }, (_, i) => 7 + i); // 7 AM – 9 PM
   const HOUR_PX = 56;
   const todayKey = dayKey(new Date());
   const scroller = useRef<HTMLDivElement>(null);
 
-  // Open on today's column when the week is this one.
   useEffect(() => {
     const idx = days.findIndex((d) => dayKey(d) === todayKey);
     if (idx > 1 && scroller.current) scroller.current.scrollLeft = Math.max(0, idx - 1) * 150;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursor]);
-
-  const blockTone = (s: MockEvent["status"]) =>
-    s === "ACCEPTED"
-      ? "bg-lumi-text text-white"
-      : s === "MAYBE"
-        ? "bg-[#DCE3FF] text-lumi-text"
-        : "bg-white text-lumi-text border-[1.5px] border-lumi-text";
 
   return (
     <div ref={scroller} className="overflow-x-auto -mx-6 sm:mx-0 px-6 sm:px-0">
@@ -457,28 +474,26 @@ function WeekGrid({ cursor, events }: { cursor: Date; events: MockEvent[] }) {
               {hours.map((h) => (
                 <div key={h} className="border-t border-lumi-border/70" style={{ height: HOUR_PX }} />
               ))}
-              {events
-                .filter((e) => sameDay(new Date(e.startTime), d))
-                .map((e) => {
-                  const s = new Date(e.startTime);
-                  const en = e.endTime ? new Date(e.endTime) : new Date(s.getTime() + 3600_000);
+              {items
+                .filter((i) => sameDay(new Date(i.start), d))
+                .map((i) => {
+                  const s = new Date(i.start);
+                  const en = new Date(i.end);
                   const startH = s.getHours() + s.getMinutes() / 60;
                   const endH = en.getHours() + en.getMinutes() / 60;
-                  if (startH < 8 || startH > 22) return null;
-                  const top = (startH - 8) * HOUR_PX + 2;
-                  const height = Math.max(52, (endH - startH) * HOUR_PX - 4);
+                  if (startH < 7 || startH > 22) return null;
+                  const top = (startH - 7) * HOUR_PX + 2;
+                  const height = Math.max(44, (endH - startH) * HOUR_PX - 4);
                   return (
-                    <Link
-                      key={e.id}
-                      href={`/events/${e.id}`}
-                      data-cursor="open"
-                      data-cursor-tone="ink"
-                      className={`absolute left-1.5 right-1.5 overflow-hidden rounded-xl px-2.5 py-2 text-[12.5px] leading-[1.25] transition-opacity hover:opacity-85 ${blockTone(e.status)}`}
+                    <ItemLink
+                      key={i.id}
+                      item={i}
                       style={{ top, height }}
+                      className={`absolute left-1.5 right-1.5 overflow-hidden rounded-xl px-2.5 py-2 text-[12.5px] leading-[1.25] transition-opacity hover:opacity-85 ${TONE[i.category].block}`}
                     >
-                      <div className="font-semibold line-clamp-2">{e.title}</div>
-                      <div className="opacity-70 truncate">{timeSpan(e)}</div>
-                    </Link>
+                      <div className="font-semibold line-clamp-2">{i.title}</div>
+                      <div className="opacity-70 truncate">{timeSpan(i)}</div>
+                    </ItemLink>
                   );
                 })}
             </div>
@@ -500,6 +515,11 @@ function weekStart(d: Date): Date {
 
 function dayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function keyToDate(k: string): Date {
+  const [y, m, d] = k.split("-").map(Number);
+  return new Date(y, m, d);
 }
 
 function shift(d: Date, view: View, dir: 1 | -1): Date {
