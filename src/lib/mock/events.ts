@@ -26,6 +26,7 @@ export type MockEvent = {
   relevance?: number; // 1..5 — fit to the user's interests
   conflictTitle?: string; // overlapping Google Calendar event, if any
   summary?: string; // one sentence on what the event is, shown on the card
+  declineReason?: string; // not_interested | not_an_event | bad_time, when the user said
 };
 
 export type MockEmail = {

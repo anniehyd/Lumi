@@ -6,6 +6,7 @@ import { Nav } from "@/components/Nav";
 import { MissReport } from "@/components/MissReport";
 import { StarCursor } from "@/components/StarCursor";
 import type { MockEvent } from "@/lib/mock/events";
+import type { SyncStatus } from "@/lib/dataSource";
 
 async function fetchEvents(): Promise<MockEvent[]> {
   const res = await fetch("/api/events?limit=200");
@@ -14,13 +15,6 @@ async function fetchEvents(): Promise<MockEvent[]> {
   return data.events as MockEvent[];
 }
 
-type SyncStatus = {
-  dbConnected: boolean;
-  eventCount: number;
-  pendingCount: number;
-  lastIngest: string | null;
-  source: "db" | "mock";
-};
 
 async function fetchSyncStatus(): Promise<SyncStatus> {
   const res = await fetch("/api/sync/status");
@@ -57,7 +51,11 @@ export default function Dashboard() {
       <Nav pendingCount={pending.length} />
 
       <main className="flex-1 w-full max-w-[1040px] mx-auto px-6 sm:px-10 pt-10 sm:pt-16 pb-24 flex flex-col gap-16">
-        <EventFeed lastScan={syncStatus?.lastIngest} />
+        <EventFeed
+          lastScan={syncStatus?.lastIngest}
+          emailsThisWeek={syncStatus?.emailsThisWeek}
+          cardsThisWeek={syncStatus?.cardsThisWeek}
+        />
 
         <footer className="flex flex-wrap items-end justify-between gap-8">
           <div className="max-w-[26ch] font-serif font-serif-soft text-[26px] sm:text-[30px] leading-[1.2] tracking-[-0.02em] text-lumi-text">

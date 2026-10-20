@@ -19,7 +19,8 @@
     "metrics": "tsx scripts/weekly-metrics.ts",
     "eval:prefilter": "tsx scripts/eval-prefilter.ts",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "label": "tsx scripts/label-emails.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Nav } from "@/components/Nav";
@@ -12,12 +12,12 @@ function isoDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** The next 14 days, starting tomorrow. Next Mon–Fri are on by default. */
-function upcoming(): { day: string; weekday: number }[] {
+/** The next `count` days, starting tomorrow. Next Mon–Fri are on by default. */
+function upcoming(count = 14): { day: string; weekday: number }[] {
   const out: { day: string; weekday: number }[] = [];
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  for (let i = 1; i <= 14; i++) {
+  for (let i = 1; i <= count; i++) {
     d.setDate(d.getDate() + 1);
     out.push({ day: isoDay(d), weekday: d.getDay() });
   }
@@ -26,20 +26,55 @@ function upcoming(): { day: string; weekday: number }[] {
 
 const HOURS = Array.from({ length: 17 }, (_, i) => 6 + i); // 6 AM – 10 PM
 
+/**
+ * useSearchParams needs a Suspense boundary in a client page; the form
+ * itself lives below so an event card can open it pre-filled
+ * (?title=…&day=YYYY-MM-DD&start=HH&end=HH).
+ */
 export default function NewPollPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewPollForm />
+    </Suspense>
+  );
+}
+
+function NewPollForm() {
   const router = useRouter();
-  const days = useMemo(upcoming, []);
+  const params = useSearchParams();
+  const preset = useMemo(() => {
+    const day = params.get("day");
+    const start = Number(params.get("start"));
+    const end = Number(params.get("end"));
+    return {
+      title: params.get("title") ?? "",
+      day: day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null,
+      start: Number.isInteger(start) && start >= 6 && start < 22 ? start : null,
+      end: Number.isInteger(end) && end > 6 && end <= 22 ? end : null,
+    };
+  }, [params]);
+  const days = useMemo(() => {
+    // Reach the preset day even when it is further out than two weeks.
+    let count = 14;
+    if (preset.day) {
+      const target = new Date(`${preset.day}T00:00:00`);
+      const diff = Math.ceil((target.getTime() - Date.now()) / 86_400_000);
+      count = Math.min(60, Math.max(14, diff + 1));
+    }
+    return upcoming(count);
+  }, [preset.day]);
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York", []);
 
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(preset.title);
   const [picked, setPicked] = useState<Set<string>>(() => {
+    if (preset.day && days.some((d) => d.day === preset.day)) return new Set([preset.day]);
     // First Monday from tomorrow, through that Friday.
     const first = days.findIndex((d) => d.weekday === 1);
     const week = first >= 0 ? days.slice(first, first + 5) : days.slice(0, 5);
     return new Set(week.filter((d) => d.weekday >= 1 && d.weekday <= 5).map((d) => d.day));
   });
-  const [startHour, setStartHour] = useState(9);
-  const [endHour, setEndHour] = useState(21);
+  const [startHour, setStartHour] = useState(preset.start ?? 9);
+  const [endHour, setEndHour] = useState(preset.end && preset.end > (preset.start ?? 9) ? preset.end : 21);
   const [slotMinutes, setSlotMinutes] = useState(30);
   const [expectedRaw, setExpectedRaw] = useState("");
   const expected = useMemo(() => parseExpected(expectedRaw), [expectedRaw]);

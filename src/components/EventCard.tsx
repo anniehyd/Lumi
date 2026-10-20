@@ -2,15 +2,34 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useState } from "react";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
 import { summaryFor } from "@/lib/brief";
+import type { SkipReason } from "@/components/EventFeed";
 
 type Props = {
   event: MockEvent;
   index: number;
   focused?: boolean;
-  onAction: (id: string, status: EventStatus) => void;
+  onAction: (id: string, status: EventStatus, reason?: SkipReason) => void;
 };
+
+const SKIP_REASONS: { id: SkipReason; label: string }[] = [
+  { id: "not_interested", label: "Not for me" },
+  { id: "bad_time", label: "Bad time" },
+  { id: "not_an_event", label: "Not an event" },
+];
+
+/** A link to a poll pre-filled from this event: same day, a window around it. */
+function goTogetherHref(e: MockEvent): string {
+  const s = new Date(e.startTime);
+  const en = e.endTime ? new Date(e.endTime) : new Date(s.getTime() + 3600_000);
+  const day = `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(2, "0")}-${String(s.getDate()).padStart(2, "0")}`;
+  const start = Math.max(6, s.getHours() - 2);
+  const end = Math.min(22, Math.max(start + 1, en.getHours() + (en.getMinutes() ? 1 : 0) + 2));
+  const q = new URLSearchParams({ title: `Go to ${e.title} together?`, day, start: String(start), end: String(end) });
+  return `/meet/new?${q.toString()}`;
+}
 
 function dayLabel(startISO: string, endISO?: string): string {
   const start = new Date(startISO);
@@ -56,6 +75,7 @@ function Stars({ value }: { value: number }) {
  * on the event page.
  */
 export function EventCard({ event, index, focused, onAction }: Props) {
+  const [skipping, setSkipping] = useState(false);
   const deadline = event.kind === "DEADLINE";
   const primaryLabel = deadline ? "Remind me" : "Attend";
   const summary = event.summary ?? summaryFor(event);
@@ -171,14 +191,46 @@ export function EventCard({ event, index, focused, onAction }: Props) {
         >
           Maybe
         </button>
-        <button
-          onClick={() => onAction(event.id, "DECLINED")}
-          data-cursor="skip this one"
-          data-cursor-tone="ink"
-          className="min-h-[44px] rounded-full px-4 text-sm font-semibold text-lumi-muted transition-colors hover:text-lumi-text"
-        >
-          Skip
-        </button>
+        {skipping ? (
+          <div className="flex sm:flex-col flex-wrap gap-1.5 sm:pt-1" role="group" aria-label="Why skip?">
+            {SKIP_REASONS.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => onAction(event.id, "DECLINED", r.id)}
+                data-cursor={r.label.toLowerCase()}
+                data-cursor-tone={r.id === "not_an_event" ? "rose" : "ink"}
+                className="min-h-[36px] rounded-full border-[1.5px] border-lumi-border bg-white px-3.5 text-[13px] font-semibold text-lumi-text hover:border-lumi-text transition-colors"
+              >
+                {r.label}
+              </button>
+            ))}
+            <button
+              onClick={() => setSkipping(false)}
+              className="min-h-[36px] px-2 text-[13px] font-semibold text-lumi-subtle hover:text-lumi-text"
+            >
+              Keep it
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setSkipping(true)}
+            data-cursor="skip this one"
+            data-cursor-tone="ink"
+            className="min-h-[44px] rounded-full px-4 text-sm font-semibold text-lumi-muted transition-colors hover:text-lumi-text"
+          >
+            Skip
+          </button>
+        )}
+        {!deadline && (
+          <Link
+            href={goTogetherHref(event)}
+            data-cursor="find a time"
+            data-cursor-tone="mark"
+            className="sm:mt-2 inline-flex items-center min-h-[36px] px-4 text-[13px] font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
+          >
+            Go with friends →
+          </Link>
+        )}
       </div>
     </motion.article>
   );

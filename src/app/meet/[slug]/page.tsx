@@ -63,6 +63,7 @@ export default function PollPage({ params }: { params: Promise<{ slug: string }>
   const [dirty, setDirty] = useState(false);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [nudged, setNudged] = useState(false);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
   // Remember who I am on this poll and pre-load my earlier answer.
@@ -291,6 +292,25 @@ export default function PollPage({ params }: { params: Promise<{ slug: string }>
                   ) : (
                     <>
                       Still waiting on: <span className="font-semibold text-lumi-text">{waiting.join(", ")}</span>
+                      {" "}
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(
+                              `Hey ${waiting.join(", ")} — can you mark when you're free for "${data.poll.title}"? ${window.location.href}`
+                            );
+                            setNudged(true);
+                            setTimeout(() => setNudged(false), 1500);
+                          } catch {
+                            // Clipboard blocked; the names are right there to type.
+                          }
+                        }}
+                        data-cursor="nudge them"
+                        data-cursor-tone="blue"
+                        className="ml-1 rounded-full bg-lumi-surface px-2.5 py-1 text-xs font-semibold text-lumi-text hover:bg-lumi-surface-hover transition-colors"
+                      >
+                        {nudged ? "Copied" : "Copy a nudge"}
+                      </button>
                     </>
                   )}
                 </p>
