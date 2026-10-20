@@ -1,29 +1,24 @@
 import { prisma } from "@/lib/db";
 import { mockEvents, mockEmails } from "@/lib/mock/events";
 import type { MockEvent, MockEmail } from "@/lib/mock/events";
+import type { Viewer } from "@/lib/apiAuth";
 
 /**
- * Data source with graceful DB → mock fallback.
- * If Postgres isn't reachable (local dev without Docker, no seed run, etc.),
- * we return the in-memory mocks so the UI keeps working.
- * Toggle strict mode via LUMI_USE_MOCK_FALLBACK=false once DB is required.
+ * Data access for the UI routes, scoped to one viewer.
+ *
+ * Every function takes the Viewer resolved by getViewer(). A signed-in user
+ * only ever sees and changes their own rows. Mock data is served in demo mode
+ * only — a real account with an empty inbox gets an empty list, never the
+ * sample events.
+ *
+ * Toggle the demo fallback off entirely with LUMI_USE_MOCK_FALLBACK=false.
  */
 
 const useMockFallback = process.env.LUMI_USE_MOCK_FALLBACK !== "false";
-const demoUserEmail = "yh5536@nyu.edu";
-const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 
-async function getDemoUserId(): Promise<string | null> {
-  if (!hasDatabaseUrl) return null;
-  try {
-    const u = await prisma.user.findUnique({
-      where: { email: demoUserEmail },
-      select: { id: true },
-    });
-    return u?.id ?? null;
-  } catch {
-    return null;
-  }
+/** Mocks stand in for the database only when nobody real is signed in. */
+function mocksAllowed(viewer: Viewer): boolean {
+  return viewer.demo && useMockFallback;
 }
 
 function dbEventToMock(e: {
@@ -44,6 +39,7 @@ function dbEventToMock(e: {
   emailId: string | null;
   relevance: number;
   conflictTitle: string | null;
+  summary: string | null;
 }): MockEvent {
   const kind = inferKind(e.title, e.description ?? "");
   return {
@@ -65,6 +61,7 @@ function dbEventToMock(e: {
     sourceEmailId: e.emailId ?? "",
     relevance: e.relevance,
     conflictTitle: e.conflictTitle ?? undefined,
+    summary: e.summary ?? undefined,
   };
 }
 
@@ -76,27 +73,24 @@ function inferKind(title: string, desc: string): MockEvent["kind"] {
   return "MEETING";
 }
 
-export async function listEvents(opts: {
-  status?: MockEvent["status"];
-  limit?: number;
-} = {}): Promise<MockEvent[]> {
+export async function listEvents(
+  viewer: Viewer,
+  opts: { status?: MockEvent["status"]; limit?: number } = {}
+): Promise<MockEvent[]> {
+  if (!viewer.userId) return mocksAllowed(viewer) ? filterMock(opts) : [];
   try {
-    const userId = await getDemoUserId();
-    if (!userId) throw new Error("demo user not seeded");
     const rows = await prisma.event.findMany({
       where: {
-        userId,
+        userId: viewer.userId,
         ...(opts.status ? { status: opts.status } : {}),
       },
       orderBy: { startTime: "asc" },
       take: opts.limit,
     });
-    if (rows.length === 0 && useMockFallback) {
-      return filterMock(opts);
-    }
+    if (rows.length === 0 && mocksAllowed(viewer)) return filterMock(opts);
     return rows.map(dbEventToMock);
   } catch (err) {
-    if (useMockFallback) return filterMock(opts);
+    if (mocksAllowed(viewer)) return filterMock(opts);
     throw err;
   }
 }
@@ -109,117 +103,124 @@ function filterMock(opts: { status?: MockEvent["status"]; limit?: number }): Moc
   return arr;
 }
 
-export async function getEvent(id: string): Promise<MockEvent | null> {
-  try {
-    if (!hasDatabaseUrl) throw new Error("database not configured");
-    const row = await prisma.event.findUnique({ where: { id } });
-    if (row) return dbEventToMock(row);
-  } catch {
-    // fall through to mock
+export async function getEvent(viewer: Viewer, id: string): Promise<MockEvent | null> {
+  if (viewer.userId) {
+    try {
+      const row = await prisma.event.findFirst({ where: { id, userId: viewer.userId } });
+      if (row) return dbEventToMock(row);
+    } catch (err) {
+      if (!mocksAllowed(viewer)) throw err;
+    }
   }
-  if (useMockFallback) return mockEvents.find((e) => e.id === id) ?? null;
-  return null;
+  return mocksAllowed(viewer) ? (mockEvents.find((e) => e.id === id) ?? null) : null;
 }
 
-export async function updateEventStatus(
-  id: string,
-  status: MockEvent["status"]
-): Promise<MockEvent | null> {
-  try {
-    if (!hasDatabaseUrl) throw new Error("database not configured");
-    const row = await prisma.event.update({
-      where: { id },
-      data: { status },
-    });
-    return dbEventToMock(row);
-  } catch {
-    // Mock mode: mutate in memory so UI round-trips feel real.
-    const found = mockEvents.find((e) => e.id === id);
-    if (found) found.status = status;
-    return found ?? null;
-  }
-}
+export type EventUpdates = {
+  status?: MockEvent["status"];
+  title?: string;
+  locationName?: string | null;
+  locationAddress?: string | null;
+  description?: string;
+  /** Set with DECLINED; null clears it when a decision is walked back. */
+  declineReason?: string | null;
+};
 
+/**
+ * Apply edits to one of the viewer's events. Returns the event plus the status
+ * it had before, so the caller can tell a real decision from a no-op.
+ */
 export async function updateEvent(
+  viewer: Viewer,
   id: string,
-  updates: {
-    status?: MockEvent["status"];
-    title?: string;
-    locationName?: string | null;
-    locationAddress?: string | null;
-    description?: string;
-  }
-): Promise<MockEvent | null> {
-  try {
-    if (!hasDatabaseUrl) throw new Error("database not configured");
-    const row = await prisma.event.update({
-      where: { id },
-      data: {
-        ...(updates.status ? { status: updates.status } : {}),
-        ...(updates.title ? { title: updates.title } : {}),
-        ...(updates.locationName !== undefined
-          ? { locationName: updates.locationName }
-          : {}),
-        ...(updates.locationAddress !== undefined
-          ? { locationAddress: updates.locationAddress }
-          : {}),
-        ...(updates.description !== undefined
-          ? { description: updates.description }
-          : {}),
-      },
-    });
-    return dbEventToMock(row);
-  } catch {
-    const found = mockEvents.find((e) => e.id === id);
-    if (!found) return null;
-    if (updates.status) found.status = updates.status;
-    if (updates.title) found.title = updates.title;
-    if (updates.locationName !== undefined) {
-      found.locationName = updates.locationName ?? undefined;
+  updates: EventUpdates
+): Promise<{ event: MockEvent; previousStatus: MockEvent["status"] } | null> {
+  if (viewer.userId) {
+    try {
+      const current = await prisma.event.findFirst({
+        where: { id, userId: viewer.userId },
+        select: { status: true },
+      });
+      if (current) {
+        const row = await prisma.event.update({
+          where: { id },
+          data: {
+            ...(updates.status ? { status: updates.status } : {}),
+            ...(updates.title ? { title: updates.title } : {}),
+            ...(updates.locationName !== undefined ? { locationName: updates.locationName } : {}),
+            ...(updates.locationAddress !== undefined
+              ? { locationAddress: updates.locationAddress }
+              : {}),
+            ...(updates.description !== undefined ? { description: updates.description } : {}),
+            ...(updates.declineReason !== undefined ? { declineReason: updates.declineReason } : {}),
+          },
+        });
+        return {
+          event: dbEventToMock(row),
+          previousStatus: current.status as MockEvent["status"],
+        };
+      }
+    } catch (err) {
+      if (!mocksAllowed(viewer)) throw err;
     }
-    if (updates.locationAddress !== undefined) {
-      found.locationAddress = updates.locationAddress ?? undefined;
-    }
-    if (updates.description !== undefined) found.description = updates.description;
-    return found;
   }
+  if (!mocksAllowed(viewer)) return null;
+
+  // Demo mode: mutate in memory so UI round-trips feel real.
+  const found = mockEvents.find((e) => e.id === id);
+  if (!found) return null;
+  const previousStatus = found.status;
+  if (updates.status) found.status = updates.status;
+  if (updates.title) found.title = updates.title;
+  if (updates.locationName !== undefined) found.locationName = updates.locationName ?? undefined;
+  if (updates.locationAddress !== undefined) {
+    found.locationAddress = updates.locationAddress ?? undefined;
+  }
+  if (updates.description !== undefined) found.description = updates.description;
+  if (updates.declineReason !== undefined) found.declineReason = updates.declineReason ?? undefined;
+  return { event: found, previousStatus };
 }
 
-export async function getEmail(id: string): Promise<MockEmail | null> {
-  try {
-    if (!hasDatabaseUrl) throw new Error("database not configured");
-    const row = await prisma.email.findUnique({ where: { id } });
-    if (row) {
-      return {
-        id: row.id,
-        from: row.from,
-        fromName: row.from.split("<")[0].trim() || row.from,
-        subject: row.subject,
-        receivedAt: row.receivedAt.toISOString(),
-        preview: (row.bodyText ?? "").slice(0, 200),
-        bodyText: row.bodyText ?? "",
-        extractedEventIds: [],
-        ignoredSnippets: [],
-      };
+export async function getEmail(viewer: Viewer, id: string): Promise<MockEmail | null> {
+  if (viewer.userId) {
+    try {
+      const row = await prisma.email.findFirst({ where: { id, userId: viewer.userId } });
+      if (row) {
+        return {
+          id: row.id,
+          from: row.from,
+          fromName: row.from.split("<")[0].trim() || row.from,
+          subject: row.subject,
+          receivedAt: row.receivedAt.toISOString(),
+          preview: (row.bodyText ?? "").slice(0, 200),
+          bodyText: row.bodyText ?? "",
+          extractedEventIds: [],
+          ignoredSnippets: [],
+        };
+      }
+    } catch (err) {
+      if (!mocksAllowed(viewer)) throw err;
     }
-  } catch {
-    // fall through
   }
-  if (useMockFallback) return mockEmails.find((e) => e.id === id) ?? null;
-  return null;
+  return mocksAllowed(viewer) ? (mockEmails.find((e) => e.id === id) ?? null) : null;
 }
 
-export async function getSyncStatus(): Promise<{
+export type SyncStatus = {
   dbConnected: boolean;
   eventCount: number;
   pendingCount: number;
   lastIngest: string | null;
+  /** Emails Lumi read and cards it made in the last seven days. */
+  emailsThisWeek: number;
+  cardsThisWeek: number;
   source: "db" | "mock";
-}> {
+};
+
+export async function getSyncStatus(viewer: Viewer): Promise<SyncStatus> {
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   try {
-    const userId = await getDemoUserId();
+    const userId = viewer.userId;
     if (!userId) throw new Error("no user");
-    const [eventCount, pendingCount, lastEmail] = await Promise.all([
+    const [eventCount, pendingCount, lastEmail, emailsThisWeek, cardsThisWeek] = await Promise.all([
       prisma.event.count({ where: { userId } }),
       prisma.event.count({ where: { userId, status: "PENDING" } }),
       prisma.email.findFirst({
@@ -227,20 +228,31 @@ export async function getSyncStatus(): Promise<{
         orderBy: { receivedAt: "desc" },
         select: { receivedAt: true },
       }),
+      prisma.email.count({ where: { userId, receivedAt: { gte: weekAgo } } }),
+      prisma.event.count({ where: { userId, createdAt: { gte: weekAgo } } }),
     ]);
     return {
       dbConnected: true,
       eventCount,
       pendingCount,
       lastIngest: lastEmail?.receivedAt.toISOString() ?? null,
+      emailsThisWeek,
+      cardsThisWeek,
       source: "db",
     };
   } catch {
+    if (!mocksAllowed(viewer)) {
+      return { dbConnected: false, eventCount: 0, pendingCount: 0, lastIngest: null, emailsThisWeek: 0, cardsThisWeek: 0, source: "db" };
+    }
     return {
       dbConnected: false,
       eventCount: mockEvents.length,
       pendingCount: mockEvents.filter((e) => e.status === "PENDING").length,
       lastIngest: mockEmails[0]?.receivedAt ?? null,
+      // The sample is "one week of inbox": every email counts as read, every
+      // event as a card that was made.
+      emailsThisWeek: 61,
+      cardsThisWeek: mockEvents.length,
       source: "mock",
     };
   }

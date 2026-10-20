@@ -36,16 +36,49 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  timezone      String    @default("America/New_York")
-  accounts      Account[]
-  sessions      Session[]
-  emails        Email[]
-  events        Event[]
+  id               String    @id @default(cuid())
+  name             String?
+  email            String?   @unique
+  emailVerified    DateTime?
+  image            String?
+  timezone         String    @default("America/New_York")
+  // Personal Handshake iCal export URL (Settings → Calendar export → Copy
+  // calendar link). Null = Handshake ingestion off for this user.
+  handshakeFeedUrl String?
+  // Set when the one-time onboarding flow completes. Null = show onboarding.
+  onboardedAt      DateTime?
+  // Secret for this user's iCal subscription feed (/api/calendar.ics?token=).
+  // Calendar apps cannot sign in, so the token is the credential. Null until
+  // the user first opens the feed section in Settings; rotated on request.
+  calendarFeedToken String?  @unique
+  // Secret in this user's forwarding address (lumi+<token>@INBOUND_EMAIL_DOMAIN).
+  // Mail sent there is ingested for this user by POST /api/ingest/inbound, so
+  // a user never has to grant Gmail access. Null until they open the
+  // "Forward to Lumi" section in Settings; rotated on request.
+  forwardingToken   String?  @unique
+  // What this user wants Lumi to surface. Shape: src/lib/profile.ts UserProfile.
+  // Null falls back to DEFAULT_PROFILE so extraction never breaks on a new user.
+  profile          Json?
+  accounts         Account[]
+  sessions         Session[]
+  polls            MeetPoll[]
+  emails           Email[]
+  events           Event[]
+  misses           Miss[]
+  senderStats      SenderStat[]
+  metrics          MetricDaily[]
+}
+
+/// A user telling us we failed to surface something. The only recall signal we
+/// have — accept/decline on Event only measures precision.
+model Miss {
+  id        String   @id @default(cuid())
+  userId    String
+  note      String   @db.Text
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model VerificationToken {
@@ -61,7 +94,12 @@ model VerificationToken {
 model Email {
   id         String   @id @default(cuid())
   userId     String
-  messageId  String   @unique // Gmail Message-ID header for dedup
+  // RFC 5322 Message-ID header. Unique per user, not globally: the same
+  // mailing-list message legitimately lands in two users' inboxes.
+  messageId  String
+  // Gmail's own id for the message — lets a sweep skip mail it has already
+  // ingested before paying for the raw fetch. Null for rows that predate it.
+  gmailId    String?
   threadId   String?
   from       String
   subject    String
@@ -70,31 +108,91 @@ model Email {
   receivedAt DateTime
   hasIcs     Boolean  @default(false)
   processed  Boolean  @default(false)
+  // Detection attempts so far. A failed extraction is retried on later sweeps
+  // until this reaches the cap, instead of being lost on the first error.
+  attempts   Int      @default(0)
+  // sha256 of sender + subject + normalized body (src/lib/detection/prefilter.ts).
+  contentHash String?
+  // Why no model call was made for this email, when one was skipped.
+  skipReason String?
   createdAt  DateTime @default(now())
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   events Event[]
 
+  @@unique([userId, messageId])
   @@index([userId, processed])
-  @@index([messageId])
+  @@index([userId, gmailId])
+  @@index([userId, contentHash])
+  @@index([userId, threadId])
+}
+
+/// Per-sender track record for the pre-filter: how many model calls this
+/// sender's mail has cost and how many events came out. A bulk sender that
+/// keeps producing nothing is muted (with periodic probes) — see
+/// shouldMuteSender in src/lib/detection/prefilter.ts.
+model SenderStat {
+  userId            String
+  sender            String
+  llmCalls          Int      @default(0)
+  eventsFound       Int      @default(0)
+  skippedSinceProbe Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, sender])
+}
+
+/// Pipeline funnel, one row per user per UTC day. Unlike Email, Event and
+/// LlmUsage this table is never purged, so lifetime numbers survive the
+/// 14-day retention window. Definitions: docs/METRICS.md.
+model MetricDaily {
+  userId String
+  day    String // UTC date, YYYY-MM-DD
+
+  emailsScanned   Int @default(0) // new emails that entered the pipeline
+  emailsSkipped   Int @default(0) // stopped by the keyword gate or pre-filter
+  emailsToModel   Int @default(0) // extraction calls made
+  eventsFound     Int @default(0) // events extracted by any tier, before dedup
+  eventsCreated   Int @default(0) // event cards shown to the user
+  eventsAccepted  Int @default(0) // transitions into ACCEPTED
+  eventsDeclined  Int @default(0) // transitions into DECLINED
+  eventsMaybe     Int @default(0) // transitions into MAYBE
+  acceptsReverted Int @default(0) // transitions out of ACCEPTED
+  llmInputTokens  Int @default(0)
+  llmOutputTokens Int @default(0)
+  llmUsd          Float @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
 }
 
 model Event {
-  id          String      @id @default(cuid())
+  id          String          @id @default(cuid())
   userId      String
   emailId     String?
-  status      EventStatus @default(PENDING)
-  confidence  Float       @default(0)
+  status      EventStatus     @default(PENDING)
+  confidence  Float           @default(0)
   detectedVia DetectionMethod
+  source      EventSource     @default(EMAIL)
+  // Stable upstream id (ICS UID) for feed-sourced events, so re-fetching the
+  // same feed updates rather than duplicates. Null for email-derived events.
+  sourceUid   String?
 
   // Core fields
   title       String
-  description String?     @db.Text
-  date        String      // ISO date: 2026-03-28
-  startTime   DateTime    // Full ISO 8601 with offset
+  description String?   @db.Text
+  // One plain sentence for the card, "Looks like …": who is doing what, for
+  // whom. Written by the model in the extraction call; the parser tiers and
+  // the Handshake feed get a templated one (src/lib/brief.ts summaryFor).
+  summary     String?   @db.Text
+  date        String // ISO date: 2026-03-28
+  startTime   DateTime // Full ISO 8601 with offset
   endTime     DateTime?
-  timezone    String      @default("America/New_York")
-  isAllDay    Boolean     @default(false)
+  timezone    String    @default("America/New_York")
+  isAllDay    Boolean   @default(false)
 
   // Location
   locationType    LocationType?
@@ -110,13 +208,17 @@ model Event {
   organizerEmail   String?
   organizerCompany String?
 
+  // Why the user skipped it, when they said: not_interested | not_an_event |
+  // bad_time. "not_an_event" is a precision signal the pipeline can learn from.
+  declineReason String?
+
   // Ranking + calendar awareness
   relevance     Int     @default(3) // 1..5 — fit to the user's interests
   conflictTitle String? // title of the overlapping Google Calendar event, if any
 
   // Extras
-  attire    String?
-  rsvpLink  String?
+  attire       String?
+  rsvpLink     String?
   rsvpDeadline DateTime?
 
   // Recurrence
@@ -132,12 +234,18 @@ model Event {
   // Dedup
   dedupHash String? // hash(title + date + organizerEmail)
 
+  // Attribution — which model and prompt produced this row. Null for ICS,
+  // schema.org and keyword extraction, which involve no model.
+  extractedBy   String?
+  promptVersion String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   email Email? @relation(fields: [emailId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, sourceUid])
   @@index([userId, status])
   @@index([userId, date])
   @@index([dedupHash])
@@ -151,15 +259,84 @@ enum EventStatus {
   ARCHIVED
 }
 
+enum EventSource {
+  EMAIL
+  HANDSHAKE
+  MEET // picked from a group scheduling poll
+}
+
 enum DetectionMethod {
   ICS
   SCHEMA_ORG
   KEYWORD
   LLM
+  MANUAL // created by the user, no detection involved
 }
 
 enum LocationType {
   PHYSICAL
   VIRTUAL
   HYBRID
+}
+
+/// One row per extraction call. Without it, cost per accepted event — the
+/// metric that catches a cheaper model quietly getting worse — is not
+/// computable from the database. Purged with the retention window.
+model LlmUsage {
+  id            String   @id @default(cuid())
+  model         String
+  provider      String
+  promptVersion String?
+  inputTokens   Int
+  outputTokens  Int
+  events        Int
+  usd           Float?
+  ms            Int
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([model, createdAt])
+}
+
+// ─── Group scheduling (When2meet-style) ───
+
+/// A "when are you free?" poll. The grid is days × time slots in the poll's
+/// own time zone; slot keys are local wall-clock strings (2026-10-20T14:30)
+/// so every participant paints the same grid. Only the owner (or anyone, in
+/// demo mode) can pick the final time.
+model MeetPoll {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  ownerId     String?
+  title       String
+  timezone    String   @default("America/New_York")
+  days        String[] // YYYY-MM-DD, in order
+  dayStart    Int // minutes after midnight, e.g. 540 = 9:00
+  dayEnd      Int // minutes after midnight, e.g. 1260 = 21:00
+  slotMinutes Int      @default(30)
+  finalStart  String? // slot key the owner picked
+  finalEnd    String? // exclusive end slot key
+  expected    String[] @default([]) // names the organizer is waiting on, optional
+  createdAt   DateTime @default(now())
+
+  owner     User?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  responses MeetResponse[]
+
+  @@index([ownerId, createdAt])
+}
+
+/// One participant's painted availability. No account needed: the edit token
+/// (kept in their browser) is what lets them change their own answer later.
+model MeetResponse {
+  id        String   @id @default(cuid())
+  pollId    String
+  name      String
+  editToken String   @unique
+  slots     String[] // slot keys the person is free for
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  poll MeetPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, name])
 }

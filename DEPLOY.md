@@ -58,3 +58,9 @@ docker compose -f ~/lumi/docker-compose.prod.yml ps
 ```
 
 Cost: ~$17/mo (t3.small + 30GB gp3 + Elastic IP attached to a running box).
+
+This single-box layout is the expensive way to run Lumi. A web-only instance
+with externally triggered sweeps is estimated at under $3/mo — see
+[docs/COST.md](docs/COST.md). On this box the worker runs in inline mode and
+the `redis` service in `docker-compose.prod.yml` is unused unless you set
+`INGEST_MODE=queue`.

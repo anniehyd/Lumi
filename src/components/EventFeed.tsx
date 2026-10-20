@@ -1,10 +1,10 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Inbox, Sparkles, Loader2 } from "lucide-react";
 import { EventCard } from "@/components/EventCard";
+import { buildBrief } from "@/lib/brief";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
 
 async function fetchEvents(): Promise<MockEvent[]> {
@@ -14,18 +14,36 @@ async function fetchEvents(): Promise<MockEvent[]> {
   return data.events as MockEvent[];
 }
 
-async function patchStatus(id: string, status: EventStatus): Promise<MockEvent> {
+export type SkipReason = "not_interested" | "not_an_event" | "bad_time";
+
+async function patchStatus(id: string, status: EventStatus, reason?: SkipReason): Promise<MockEvent> {
   const res = await fetch(`/api/events/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(reason ? { status, reason } : { status }),
   });
   if (!res.ok) throw new Error("failed to update status");
   const data = await res.json();
   return data.event;
 }
 
-export function EventFeed() {
+/** Only undecided, still-upcoming events; most relevant first, soonest within a rating. */
+export function pendingOf(events: MockEvent[], now = Date.now()): MockEvent[] {
+  return events
+    .filter((e) => e.status === "PENDING" || e.status === "MAYBE")
+    .filter((e) => new Date(e.startTime).getTime() > now)
+    .sort((a, b) => (b.relevance ?? 3) - (a.relevance ?? 3) || a.startTime.localeCompare(b.startTime));
+}
+
+export function EventFeed({
+  lastScan,
+  emailsThisWeek,
+  cardsThisWeek,
+}: {
+  lastScan?: string | null;
+  emailsThisWeek?: number;
+  cardsThisWeek?: number;
+}) {
   const qc = useQueryClient();
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["events"],
@@ -36,8 +54,8 @@ export function EventFeed() {
   const [focusIdx, setFocusIdx] = useState(0);
 
   const mutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: EventStatus }) =>
-      patchStatus(id, status),
+    mutationFn: ({ id, status, reason }: { id: string; status: EventStatus; reason?: SkipReason }) =>
+      patchStatus(id, status, reason),
     onMutate: async ({ id, status }) => {
       await qc.cancelQueries({ queryKey: ["events"] });
       const prev = qc.getQueryData<MockEvent[]>(["events"]);
@@ -52,33 +70,18 @@ export function EventFeed() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["events"] }),
   });
 
-  // Only undecided, still-upcoming events live in the feed: once you Attend
-  // or Decline, the card leaves the interface (accepted ones live on in the
-  // calendar), and events that have already started are no longer actionable.
-  const pending = useMemo(
-    () =>
-      events
-        .filter((e) => e.status === "PENDING" || e.status === "MAYBE")
-        .filter((e) => new Date(e.startTime).getTime() > Date.now())
-        // Most relevant first (tech > networking > everything else); soonest
-        // first within the same star rating.
-        .sort(
-          (a, b) =>
-            (b.relevance ?? 3) - (a.relevance ?? 3) ||
-            a.startTime.localeCompare(b.startTime)
-        ),
-    [events]
-  );
+  const pending = useMemo(() => pendingOf(events), [events]);
+  const brief = useMemo(() => buildBrief(pending), [pending]);
 
   const setStatus = useCallback(
-    (id: string, status: EventStatus) => {
-      mutation.mutate({ id, status });
+    (id: string, status: EventStatus, reason?: SkipReason) => {
+      mutation.mutate({ id, status, reason });
       setFocusIdx((i) => Math.max(0, Math.min(i, pending.length - 2)));
     },
     [mutation, pending.length]
   );
 
-  // Keyboard shortcuts: j/k navigate, a/m/d act on focused card
+  // Keyboard shortcuts: j/k navigate, a/m/d act on the focused row.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -114,70 +117,70 @@ export function EventFeed() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pending, focusIdx, setStatus]);
 
-  return (
-    <div className="flex flex-col gap-6 overflow-y-auto pr-1">
-      {/* Header row */}
-      <div className="flex items-baseline justify-between">
-        <div>
-          <h2 className="font-serif text-3xl text-lumi-text">Inbox</h2>
-          <p className="text-sm text-lumi-muted mt-1">
-            {pending.length} event{pending.length === 1 ? "" : "s"} awaiting your decision
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-lumi-subtle">
-          <Sparkles className="w-3.5 h-3.5 text-lumi-accent" />
-          <span>Extracted by Lumi</span>
-        </div>
-      </div>
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const scanned = lastScan
+    ? new Date(lastScan).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : null;
 
-      {/* Pending */}
-      {isLoading ? (
-        <LoadingState />
-      ) : pending.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <div className="flex flex-col gap-3">
+  return (
+    <div className="flex flex-col gap-8 sm:gap-10">
+      <section className="flex flex-col items-start gap-2.5">
+        <p className="animate-rise [animation-delay:80ms] inline-flex items-center gap-2.5 text-sm text-lumi-muted">
+          <span className="w-2 h-2 rounded-full bg-lumi-accent" />
+          {today}
+          {scanned && ` · scanned at ${scanned}`}
+          {typeof emailsThisWeek === "number" &&
+            emailsThisWeek > 0 &&
+            ` · Lumi read ${emailsThisWeek} emails this week and showed you ${cardsThisWeek ?? 0}`}
+        </p>
+        <h1 className="animate-rise [animation-delay:200ms] font-serif text-[26px] sm:text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-lumi-text max-w-[40ch]">
+          {isLoading ? "Reading your inbox…" : <Headline text={brief.headline} emphasis={brief.emphasis} />}
+        </h1>
+        {!isLoading && (
+          <p className="animate-rise [animation-delay:320ms] text-[15px] leading-[1.5] text-lumi-muted max-w-[60ch]">
+            {brief.subline}
+          </p>
+        )}
+      </section>
+
+      {!isLoading && pending.length > 0 && (
+        <section className="flex flex-col border-b border-lumi-border">
           <AnimatePresence mode="popLayout">
             {pending.map((event, idx) => (
               <EventCard
                 key={event.id}
                 event={event}
+                index={idx}
                 focused={idx === focusIdx}
                 onAction={setStatus}
               />
             ))}
           </AnimatePresence>
-        </div>
+        </section>
       )}
-
     </div>
   );
 }
 
-function LoadingState() {
+/** The headline with one word under a highlighter stroke. */
+function Headline({ text, emphasis }: { text: string; emphasis: string | null }) {
+  if (!emphasis) return <>{text}</>;
+  const at = text.toLowerCase().indexOf(emphasis.toLowerCase());
+  if (at < 0) return <>{text}</>;
+  const before = text.slice(0, at);
+  const word = text.slice(at, at + emphasis.length);
+  const after = text.slice(at + emphasis.length);
   return (
-    <div className="flex items-center justify-center py-12 text-sm text-lumi-muted">
-      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-      Loading your inbox…
-    </div>
+    <>
+      {before}
+      <span className="relative inline-block italic font-medium">
+        <span
+          aria-hidden="true"
+          className="animate-mark absolute -left-0.5 -right-1 bottom-[3px] h-[36%] rounded-sm bg-lumi-mark origin-left"
+        />
+        <span className="relative">{word}</span>
+      </span>
+      {after}
+    </>
   );
 }
-
-function EmptyState() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-20 text-center"
-    >
-      <div className="w-14 h-14 rounded-full border border-lumi-border flex items-center justify-center mb-4">
-        <Inbox className="w-6 h-6 text-lumi-subtle" />
-      </div>
-      <h3 className="font-serif text-xl text-lumi-text">All clear.</h3>
-      <p className="text-sm text-lumi-muted mt-1 max-w-xs">
-        Lumi will surface new invites here as they arrive.
-      </p>
-    </motion.div>
-  );
-}
-

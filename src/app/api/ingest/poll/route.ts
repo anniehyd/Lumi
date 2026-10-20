@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { ingestUser } from "@/lib/services/ingest";
+import { ingestUser, ingestHandshake } from "@/lib/services/ingest";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Manual ingest: pull recent mail, run detection, return counts.
+ * Manual ingest: pull recent mail and the Handshake feed, run detection,
+ * return counts.
  * Call from Settings ("Scan now") or on first login.
  */
 export async function POST(req: Request) {
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
     query: body.query,
     maxResults: body.maxResults,
   });
+  const handshake = await ingestHandshake(session.user.id);
 
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, handshake });
 }

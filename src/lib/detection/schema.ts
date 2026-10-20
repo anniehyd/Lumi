@@ -18,16 +18,23 @@ export function parseSchemaOrg(html: string): ExtractedEvent[] {
     } catch {
       continue;
     }
-    const nodes = Array.isArray(data) ? data : [data];
+    // Publishers wrap events in a top-level array or an @graph container.
+    const top = Array.isArray(data) ? data : [data];
+    const nodes = top.flatMap((node) => {
+      const graph = (node as { "@graph"?: unknown } | null)?.["@graph"];
+      return Array.isArray(graph) ? graph : [node];
+    });
     for (const node of nodes) {
       if (!node || typeof node !== "object") continue;
       const n = node as Record<string, unknown>;
       const type = n["@type"];
       if (type !== "Event" && !(Array.isArray(type) && type.includes("Event"))) continue;
 
-      const name = (n.name as string) ?? "";
-      const startDate = (n.startDate as string) ?? "";
-      if (!name || !startDate) continue;
+      const name = typeof n.name === "string" ? n.name : "";
+      // Markup with a missing or unparseable date falls through to the next
+      // tier instead of throwing and failing the whole email.
+      const start = toIso(n.startDate);
+      if (!name || !start) continue;
 
       const location = n.location as Record<string, unknown> | undefined;
       const organizer = n.organizer as Record<string, unknown> | undefined;
@@ -35,8 +42,8 @@ export function parseSchemaOrg(html: string): ExtractedEvent[] {
       events.push({
         title: name,
         description: (n.description as string) ?? "",
-        startTime: new Date(startDate).toISOString(),
-        endTime: n.endDate ? new Date(n.endDate as string).toISOString() : undefined,
+        startTime: start,
+        endTime: toIso(n.endDate) ?? undefined,
         timezone: (n.timezone as string) ?? "UTC",
         locationName: (location?.name as string) ?? undefined,
         locationAddress:
@@ -51,4 +58,10 @@ export function parseSchemaOrg(html: string): ExtractedEvent[] {
     }
   }
   return events;
+}
+
+function toIso(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
