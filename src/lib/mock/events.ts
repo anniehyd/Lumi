@@ -235,7 +235,7 @@ This is a reminder that Persona has invited you to complete the General Coding A
 
 The assessment takes about 70 minutes and must be completed by Friday at 11:59 PM ET. The link will expire after that.
 
-Start assessment: https://app.codesignal.com/assessment/persona`,
+Start assessment: https://assess.personahq.dev/start`,
     extractedEventIds: ["evt_codesignal_deadline"],
     ignoredSnippets: [],
   },
@@ -324,7 +324,7 @@ export const mockEvents: MockEvent[] = [
     conflictTitle: "Linear Algebra Recitation",
     summary:
       "Marshall Wace is a London hedge fund with a large technology team; this coffee chat is where their developers talk to students about internships.",
-    rsvpLink: "https://nyu.joinhandshake.com/events/marshall-wace-coffee-chats",
+    rsvpLink: "https://mwtech-campus.events/nyu/coffee-chats",
     timezone: "America/New_York",
     locationName: "Interview Room 4 — Wasserman Union Square",
     locationAddress: wassermanUnionSquare,
@@ -368,7 +368,7 @@ export const mockEvents: MockEvent[] = [
       "NYU's Changemaker Fellowship funds about 35 students with grants up to $5,000 for public-service projects; this is the application deadline.",
     timezone: "America/New_York",
     organizerName: "NYU Changemaker Council",
-    rsvpLink: "https://wasserman.nyu.edu/changemaker",
+    rsvpLink: "https://changemaker.nyu-apply.org/2026",
     sourceEmailId: "email_wasserman_01",
   },
   {
@@ -406,7 +406,7 @@ export const mockEvents: MockEvent[] = [
     locationAddress: "16 Washington Place, New York, NY 10003",
     organizerName: "Tech@NYU",
     organizerCompany: "Figma",
-    rsvpLink: "https://lu.ma/figma-hackday-nyu",
+    rsvpLink: "https://hackday.figmacampus.co/nyu",
     sourceEmailId: "email_technyu_week",
   },
   {
@@ -462,7 +462,7 @@ export const mockEvents: MockEvent[] = [
     locationAddress: "40 West 4th Street, New York, NY 10012",
     organizerName: "NYU Quant Finance Society",
     organizerCompany: "Optiver",
-    rsvpLink: "https://engage.nyu.edu/event/optiver-info-session",
+    rsvpLink: "https://nyu.optivercampus.events/info-session",
     sourceEmailId: "email_qfs_optiver",
   },
   {
@@ -517,7 +517,7 @@ export const mockEvents: MockEvent[] = [
     locationAddress: "29 Little West 12th Street, New York, NY 10014",
     organizerName: "Elaine (Meta) via Supermomos",
     organizerCompany: "Supermomos",
-    rsvpLink: "https://supermomos.com/e/design-research-ai",
+    rsvpLink: "https://aidesignnight.nyc/rsvp",
     sourceEmailId: "email_supermomos",
   },
   {
@@ -536,7 +536,7 @@ export const mockEvents: MockEvent[] = [
     locationName: "The Yard",
     locationAddress: "157 13th Street, Brooklyn, NY 11215",
     organizerName: "CryptoMondays NYC",
-    rsvpLink: "https://lu.ma/cryptomondays-nyc",
+    rsvpLink: "https://cryptomondays.nyc/rsvp",
     sourceEmailId: "email_luma_cryptomondays",
   },
   {
@@ -556,7 +556,7 @@ export const mockEvents: MockEvent[] = [
     locationAddress: "44 West 4th Street, New York, NY 10012",
     organizerName: "Stern Venture Society",
     organizerCompany: "NEA",
-    rsvpLink: "https://engage.nyu.edu/event/svs-tiffany-luck",
+    rsvpLink: "https://rsvp.sternventures.club/tiffany-luck",
     sourceEmailId: "email_svs_tiffany",
   },
   {
@@ -573,7 +573,7 @@ export const mockEvents: MockEvent[] = [
     timezone: "America/New_York",
     organizerName: "CodeSignal",
     organizerCompany: "Persona",
-    rsvpLink: "https://app.codesignal.com/assessment/persona",
+    rsvpLink: "https://assess.personahq.dev/start",
     sourceEmailId: "email_codesignal",
   },
   {
@@ -593,7 +593,7 @@ export const mockEvents: MockEvent[] = [
     locationAddress: wassermanUnionSquare,
     organizerName: "Handshake",
     organizerCompany: "MSG Entertainment",
-    rsvpLink: "https://nyu.joinhandshake.com/events/msg-early-careers",
+    rsvpLink: "https://earlycareers.msg-showcase.events",
     sourceEmailId: "email_handshake_msg",
   },
 ];
