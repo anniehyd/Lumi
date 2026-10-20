@@ -60,6 +60,10 @@ export async function PATCH(
       : undefined;
   const description =
     typeof body.description === "string" ? body.description.trim() : undefined;
+  const REASONS = ["not_interested", "not_an_event", "bad_time"];
+  const reason = typeof body.reason === "string" && REASONS.includes(body.reason) ? body.reason : undefined;
+  // A reason only makes sense with a skip; any other decision clears it.
+  const declineReason = status === "DECLINED" ? (reason ?? null) : status ? null : undefined;
 
   const updated = await updateEvent(viewer, id, {
     status,
@@ -67,6 +71,7 @@ export async function PATCH(
     locationName,
     locationAddress,
     description,
+    declineReason,
   });
   if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
   const { event, previousStatus } = updated;

@@ -41,8 +41,8 @@ export default function SettingsPage() {
         </Section>
 
         <Section title="Email source">
-          <InboxRow signedIn={signedIn} email={session?.user?.email ?? null} />
           <ForwardingRow signedIn={signedIn} />
+          <InboxRow signedIn={signedIn} email={session?.user?.email ?? null} />
         </Section>
 
         <Section title="Handshake">

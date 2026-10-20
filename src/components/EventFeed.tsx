@@ -14,11 +14,13 @@ async function fetchEvents(): Promise<MockEvent[]> {
   return data.events as MockEvent[];
 }
 
-async function patchStatus(id: string, status: EventStatus): Promise<MockEvent> {
+export type SkipReason = "not_interested" | "not_an_event" | "bad_time";
+
+async function patchStatus(id: string, status: EventStatus, reason?: SkipReason): Promise<MockEvent> {
   const res = await fetch(`/api/events/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(reason ? { status, reason } : { status }),
   });
   if (!res.ok) throw new Error("failed to update status");
   const data = await res.json();
@@ -33,7 +35,15 @@ export function pendingOf(events: MockEvent[], now = Date.now()): MockEvent[] {
     .sort((a, b) => (b.relevance ?? 3) - (a.relevance ?? 3) || a.startTime.localeCompare(b.startTime));
 }
 
-export function EventFeed({ lastScan }: { lastScan?: string | null }) {
+export function EventFeed({
+  lastScan,
+  emailsThisWeek,
+  cardsThisWeek,
+}: {
+  lastScan?: string | null;
+  emailsThisWeek?: number;
+  cardsThisWeek?: number;
+}) {
   const qc = useQueryClient();
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["events"],
@@ -44,7 +54,8 @@ export function EventFeed({ lastScan }: { lastScan?: string | null }) {
   const [focusIdx, setFocusIdx] = useState(0);
 
   const mutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: EventStatus }) => patchStatus(id, status),
+    mutationFn: ({ id, status, reason }: { id: string; status: EventStatus; reason?: SkipReason }) =>
+      patchStatus(id, status, reason),
     onMutate: async ({ id, status }) => {
       await qc.cancelQueries({ queryKey: ["events"] });
       const prev = qc.getQueryData<MockEvent[]>(["events"]);
@@ -63,8 +74,8 @@ export function EventFeed({ lastScan }: { lastScan?: string | null }) {
   const brief = useMemo(() => buildBrief(pending), [pending]);
 
   const setStatus = useCallback(
-    (id: string, status: EventStatus) => {
-      mutation.mutate({ id, status });
+    (id: string, status: EventStatus, reason?: SkipReason) => {
+      mutation.mutate({ id, status, reason });
       setFocusIdx((i) => Math.max(0, Math.min(i, pending.length - 2)));
     },
     [mutation, pending.length]
@@ -118,7 +129,9 @@ export function EventFeed({ lastScan }: { lastScan?: string | null }) {
           <span className="w-2 h-2 rounded-full bg-lumi-accent" />
           {today}
           {scanned && ` · scanned at ${scanned}`}
-          {pending.length > 0 && ` · ${pending.length} to decide`}
+          {typeof emailsThisWeek === "number" &&
+            emailsThisWeek > 0 &&
+            ` · Lumi read ${emailsThisWeek} emails this week and showed you ${cardsThisWeek ?? 0}`}
         </p>
         <h1 className="animate-rise [animation-delay:200ms] font-serif text-[26px] sm:text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-lumi-text max-w-[40ch]">
           {isLoading ? "Reading your inbox…" : <Headline text={brief.headline} emphasis={brief.emphasis} />}

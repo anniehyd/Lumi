@@ -121,6 +121,8 @@ export type EventUpdates = {
   locationName?: string | null;
   locationAddress?: string | null;
   description?: string;
+  /** Set with DECLINED; null clears it when a decision is walked back. */
+  declineReason?: string | null;
 };
 
 /**
@@ -149,6 +151,7 @@ export async function updateEvent(
               ? { locationAddress: updates.locationAddress }
               : {}),
             ...(updates.description !== undefined ? { description: updates.description } : {}),
+            ...(updates.declineReason !== undefined ? { declineReason: updates.declineReason } : {}),
           },
         });
         return {
@@ -173,6 +176,7 @@ export async function updateEvent(
     found.locationAddress = updates.locationAddress ?? undefined;
   }
   if (updates.description !== undefined) found.description = updates.description;
+  if (updates.declineReason !== undefined) found.declineReason = updates.declineReason ?? undefined;
   return { event: found, previousStatus };
 }
 
@@ -200,17 +204,23 @@ export async function getEmail(viewer: Viewer, id: string): Promise<MockEmail | 
   return mocksAllowed(viewer) ? (mockEmails.find((e) => e.id === id) ?? null) : null;
 }
 
-export async function getSyncStatus(viewer: Viewer): Promise<{
+export type SyncStatus = {
   dbConnected: boolean;
   eventCount: number;
   pendingCount: number;
   lastIngest: string | null;
+  /** Emails Lumi read and cards it made in the last seven days. */
+  emailsThisWeek: number;
+  cardsThisWeek: number;
   source: "db" | "mock";
-}> {
+};
+
+export async function getSyncStatus(viewer: Viewer): Promise<SyncStatus> {
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   try {
     const userId = viewer.userId;
     if (!userId) throw new Error("no user");
-    const [eventCount, pendingCount, lastEmail] = await Promise.all([
+    const [eventCount, pendingCount, lastEmail, emailsThisWeek, cardsThisWeek] = await Promise.all([
       prisma.event.count({ where: { userId } }),
       prisma.event.count({ where: { userId, status: "PENDING" } }),
       prisma.email.findFirst({
@@ -218,23 +228,31 @@ export async function getSyncStatus(viewer: Viewer): Promise<{
         orderBy: { receivedAt: "desc" },
         select: { receivedAt: true },
       }),
+      prisma.email.count({ where: { userId, receivedAt: { gte: weekAgo } } }),
+      prisma.event.count({ where: { userId, createdAt: { gte: weekAgo } } }),
     ]);
     return {
       dbConnected: true,
       eventCount,
       pendingCount,
       lastIngest: lastEmail?.receivedAt.toISOString() ?? null,
+      emailsThisWeek,
+      cardsThisWeek,
       source: "db",
     };
   } catch {
     if (!mocksAllowed(viewer)) {
-      return { dbConnected: false, eventCount: 0, pendingCount: 0, lastIngest: null, source: "db" };
+      return { dbConnected: false, eventCount: 0, pendingCount: 0, lastIngest: null, emailsThisWeek: 0, cardsThisWeek: 0, source: "db" };
     }
     return {
       dbConnected: false,
       eventCount: mockEvents.length,
       pendingCount: mockEvents.filter((e) => e.status === "PENDING").length,
       lastIngest: mockEmails[0]?.receivedAt ?? null,
+      // The sample is "one week of inbox": every email counts as read, every
+      // event as a card that was made.
+      emailsThisWeek: 61,
+      cardsThisWeek: mockEvents.length,
       source: "mock",
     };
   }

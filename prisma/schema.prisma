@@ -208,6 +208,10 @@ model Event {
   organizerEmail   String?
   organizerCompany String?
 
+  // Why the user skipped it, when they said: not_interested | not_an_event |
+  // bad_time. "not_an_event" is a precision signal the pipeline can learn from.
+  declineReason String?
+
   // Ranking + calendar awareness
   relevance     Int     @default(3) // 1..5 — fit to the user's interests
   conflictTitle String? // title of the overlapping Google Calendar event, if any
