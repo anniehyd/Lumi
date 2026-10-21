@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions, hasGoogleAccount } from "@/lib/auth";
+import { authOptions, googleGrants } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   forwardingAddress,
@@ -30,8 +30,8 @@ export type ForwardingStatus = {
 };
 
 async function status(userId: string, token: string | null, domain: string | null): Promise<ForwardingStatus> {
-  const [gmailConnected, confirmationMail, latest] = await Promise.all([
-    hasGoogleAccount(userId),
+  const [grants, confirmationMail, latest] = await Promise.all([
+    googleGrants(userId),
     prisma.email.findFirst({
       where: { userId, skipReason: "forwarding_confirmation" },
       orderBy: { receivedAt: "desc" },
@@ -49,7 +49,7 @@ async function status(userId: string, token: string | null, domain: string | nul
   return {
     configured: !!domain,
     address: token && domain ? forwardingAddress(token, domain) : null,
-    gmailConnected,
+    gmailConnected: grants.gmail,
     confirmation: confirmation ? { ...confirmation, receivedAt: confirmationMail!.receivedAt.toISOString() } : null,
     lastReceivedAt: latest?.receivedAt.toISOString() ?? null,
   };

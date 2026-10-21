@@ -17,7 +17,14 @@ terminating HTTPS for a DuckDNS domain.
 3. **Google OAuth client** (browser only, no CLI exists):
    - https://console.cloud.google.com → create project `lumi`
    - Enable **Gmail API** and **Google Calendar API** (APIs & Services → Library)
-   - OAuth consent screen: External, add yourself as a **test user**
+   - OAuth consent screen: External. Under **Audience**, press **Publish app**
+     so anyone with a Google account can sign in — no test-user list. This
+     needs no verification because sign-in requests only `openid email
+     profile` (see `src/lib/googleScopes.ts`). Gmail and Calendar are a
+     separate, optional grant users give from Settings or onboarding; until
+     Google has verified the app that screen shows an "unverified app"
+     warning and is capped at 100 users. Forwarding, Handshake and the iCal
+     feed never need it.
    - Credentials → Create OAuth client ID → Web application:
      - Authorized origin: `https://<sub>.duckdns.org`
      - Redirect URI: `https://<sub>.duckdns.org/api/auth/callback/google`

@@ -3,26 +3,33 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   Mail,
   Calendar,
   Sparkles,
   Check,
+  Copy,
   ArrowRight,
   Loader2,
   Compass,
   Link2,
 } from "lucide-react";
 import { ROLES, INTERESTS, type UserProfile } from "@/lib/profile";
+import { connectGoogle } from "@/lib/googleConnect";
 
 /**
  * One-time setup. Shown only while User.onboardedAt is null — OnboardingGate
  * redirects here, and finishing stamps the flag so it never appears again.
  * The profile stays editable afterwards from Settings.
+ *
+ * Two screens: what the user cares about, then where Lumi should look. The
+ * user is already signed in (name and email only); nothing here needs a
+ * Google permission unless they choose to connect Gmail and Calendar.
  */
 
-type Step = 0 | 1 | 2 | 3 | 4 | 5;
-const TOTAL_VISIBLE = 4; // Gmail, Calendar, Interests, Handshake
+type Step = 0 | 1 | 2 | 3;
+const TOTAL_VISIBLE = 2; // Interests, Sources
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<Step>(0);
@@ -36,8 +43,8 @@ export default function OnboardingPage() {
   const [handshakeFeedUrl, setHandshakeFeedUrl] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  /** Persist and stamp onboardedAt, then run the scan animation. */
-  const finish = useCallback(async () => {
+  /** Persist the profile and stamp onboardedAt. */
+  const save = useCallback(async () => {
     setSaveError(null);
     try {
       const res = await fetch("/api/profile", {
@@ -50,13 +57,27 @@ export default function OnboardingPage() {
         }),
       });
       if (!res.ok) throw new Error(`save failed (${res.status})`);
-      setStep(4);
+      return true;
     } catch (e) {
       setSaveError(
         e instanceof Error ? e.message : "Could not save your preferences. Try again."
       );
+      return false;
     }
   }, [profile, handshakeFeedUrl]);
+
+  const finish = useCallback(async () => {
+    if (await save()) setStep(2);
+  }, [save]);
+
+  /**
+   * Leaving for Google's consent screen ends this page, so the profile is
+   * saved first; onboardedAt is stamped, and the callback lands on the
+   * dashboard rather than back here.
+   */
+  const connect = useCallback(async () => {
+    if (await save()) await connectGoogle("/dashboard");
+  }, [save]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -83,27 +104,26 @@ export default function OnboardingPage() {
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <AnimatePresence mode="wait">
-          {step === 0 && <StepConnectGmail key="gmail" onNext={() => setStep(1)} />}
-          {step === 1 && <StepConnectCalendar key="cal" onNext={() => setStep(2)} />}
-          {step === 2 && (
+          {step === 0 && (
             <StepInterests
               key="interests"
               profile={profile}
               setProfile={setProfile}
-              onNext={() => setStep(3)}
+              onNext={() => setStep(1)}
             />
           )}
-          {step === 3 && (
-            <StepHandshake
-              key="handshake"
-              value={handshakeFeedUrl}
-              setValue={setHandshakeFeedUrl}
-              onNext={finish}
+          {step === 1 && (
+            <StepSources
+              key="sources"
+              handshake={handshakeFeedUrl}
+              setHandshake={setHandshakeFeedUrl}
+              onConnect={connect}
+              onFinish={finish}
               error={saveError}
             />
           )}
-          {step === 4 && <StepFirstScan key="scan" onNext={() => setStep(5)} />}
-          {step === 5 && <StepDone key="done" />}
+          {step === 2 && <StepFirstScan key="scan" onNext={() => setStep(3)} />}
+          {step === 3 && <StepDone key="done" />}
         </AnimatePresence>
       </main>
     </div>
@@ -150,41 +170,6 @@ function PrimaryButton({
       {children}
       <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
     </button>
-  );
-}
-
-function StepConnectGmail({ onNext }: { onNext: () => void }) {
-  return (
-    <Shell>
-      <Icon>
-        <Mail className="w-6 h-6 text-lumi-accent" />
-      </Icon>
-      <h1 className="font-serif text-4xl text-lumi-text mb-3">Connect your Gmail</h1>
-      <p className="text-sm text-lumi-muted mb-8 leading-relaxed">
-        Lumi reads incoming mail to find event invitations. We never send, delete,
-        or modify your messages.
-      </p>
-      <PrimaryButton onClick={onNext}>Continue with Google</PrimaryButton>
-      <p className="mt-4 text-[11px] text-lumi-subtle">
-        Read-only scope · Revoke anytime from your Google Account
-      </p>
-    </Shell>
-  );
-}
-
-function StepConnectCalendar({ onNext }: { onNext: () => void }) {
-  return (
-    <Shell>
-      <Icon>
-        <Calendar className="w-6 h-6 text-lumi-accent" />
-      </Icon>
-      <h1 className="font-serif text-4xl text-lumi-text mb-3">Connect your calendar</h1>
-      <p className="text-sm text-lumi-muted mb-8 leading-relaxed">
-        When you tap <span className="text-lumi-text">Attend</span>, Lumi writes
-        the event to Google Calendar with reminders.
-      </p>
-      <PrimaryButton onClick={onNext}>Authorize Calendar</PrimaryButton>
-    </Shell>
   );
 }
 
@@ -317,43 +302,144 @@ function StepInterests({
   );
 }
 
+type ForwardingStatus = { configured: boolean; address: string | null };
+
 /**
- * Optional, and deliberately last: an ingestion source that needs no Google
- * authorization at all, which is the only path that works while the OAuth app
- * is still in Testing.
+ * Where Lumi should look. Three sources, none required to finish:
+ *   - the forwarding address, which needs no Google permission at all and is
+ *     the path that works for anyone while the OAuth app is unverified;
+ *   - Gmail + Google Calendar, a second Google authorization (optional);
+ *   - the Handshake calendar export link.
+ * The user can also do all of this later from Settings.
  */
-function StepHandshake({
-  value,
-  setValue,
-  onNext,
+function StepSources({
+  handshake,
+  setHandshake,
+  onConnect,
+  onFinish,
   error,
 }: {
-  value: string;
-  setValue: (v: string) => void;
-  onNext: () => void;
+  handshake: string;
+  setHandshake: (v: string) => void;
+  onConnect: () => void;
+  onFinish: () => void;
   error: string | null;
 }) {
+  const [copied, setCopied] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const { data: forwarding } = useQuery({
+    queryKey: ["forwarding"],
+    queryFn: async () => {
+      const res = await fetch("/api/sources/forwarding");
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as ForwardingStatus;
+    },
+    retry: false,
+  });
+
+  async function copyAddress() {
+    if (!forwarding?.address) return;
+    await navigator.clipboard.writeText(forwarding.address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
-    <Shell>
+    <Shell wide>
       <Icon>
-        <Link2 className="w-6 h-6 text-lumi-accent" />
+        <Mail className="w-6 h-6 text-lumi-accent" />
       </Icon>
-      <h1 className="font-serif text-4xl text-lumi-text mb-3">Add Handshake</h1>
+      <h1 className="font-serif text-4xl text-lumi-text mb-3">Where should Lumi look?</h1>
       <p className="text-sm text-lumi-muted mb-8 leading-relaxed">
-        Optional, and the fastest way to see Lumi work. In Handshake go to
-        Settings → Calendar export and copy your calendar link.
+        Pick any, or none for now. Everything here is also in Settings.
       </p>
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="https://app.joinhandshake.com/…​.ics"
-        className="w-full rounded-lg bg-lumi-surface border border-lumi-border px-3 py-2.5 text-sm text-lumi-text placeholder:text-lumi-subtle focus:border-lumi-accent focus:outline-none mb-4"
-      />
-      {error && <p className="mb-4 text-xs text-lumi-rose">{error}</p>}
-      <PrimaryButton onClick={onNext}>
-        {value.trim() ? "Finish setup" : "Skip for now"}
-      </PrimaryButton>
+
+      <div className="text-left space-y-4">
+        {forwarding?.configured && forwarding.address && (
+          <SourceCard
+            icon={<Mail className="w-4 h-4" />}
+            title="Forward newsletters to Lumi"
+            body="No Google permission needed. Forward an email by hand, or set a Gmail filter to forward automatically."
+          >
+            <div className="rounded-lg bg-lumi-bg border border-lumi-border pl-3 pr-1 py-1 flex items-center gap-2">
+              <code className="flex-1 text-xs text-lumi-text font-mono truncate">{forwarding.address}</code>
+              <button
+                onClick={copyAddress}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-lumi-muted hover:text-lumi-text transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-lumi-green" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </SourceCard>
+        )}
+
+        <SourceCard
+          icon={<Calendar className="w-4 h-4" />}
+          title="Connect Gmail and Google Calendar"
+          body="Lumi sweeps your Inbox tab twice a day (read-only) and writes the events you accept to your calendar."
+        >
+          <button
+            onClick={() => {
+              setConnecting(true);
+              onConnect();
+            }}
+            disabled={connecting}
+            className="inline-flex items-center gap-2 rounded-lg border border-lumi-border px-3.5 py-2 text-xs font-semibold text-lumi-text hover:border-lumi-accent/50 transition-colors disabled:opacity-40"
+          >
+            {connecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            Continue with Google
+          </button>
+          <p className="mt-2 text-[11px] text-lumi-subtle">
+            Google may warn that Lumi is not yet verified. The access is read-only and you can
+            revoke it any time from your Google Account.
+          </p>
+        </SourceCard>
+
+        <SourceCard
+          icon={<Link2 className="w-4 h-4" />}
+          title="Add Handshake"
+          body="In Handshake go to Settings → Calendar export and paste your calendar link."
+        >
+          <input
+            value={handshake}
+            onChange={(e) => setHandshake(e.target.value)}
+            placeholder="https://app.joinhandshake.com/…​.ics"
+            className="w-full rounded-lg bg-lumi-bg border border-lumi-border px-3 py-2 text-sm text-lumi-text placeholder:text-lumi-subtle focus:border-lumi-accent focus:outline-none"
+          />
+        </SourceCard>
+      </div>
+
+      {error && <p className="mt-4 text-xs text-lumi-rose">{error}</p>}
+      <div className="mt-8">
+        <PrimaryButton onClick={onFinish}>
+          {handshake.trim() ? "Finish setup" : "Finish, I'll decide later"}
+        </PrimaryButton>
+      </div>
     </Shell>
+  );
+}
+
+function SourceCard({
+  icon,
+  title,
+  body,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-lumi-border bg-lumi-surface p-4">
+      <div className="flex items-center gap-2 text-lumi-accent mb-1">
+        {icon}
+        <span className="text-sm font-semibold text-lumi-text">{title}</span>
+      </div>
+      <p className="text-xs text-lumi-muted leading-relaxed mb-3">{body}</p>
+      {children}
+    </div>
   );
 }
 

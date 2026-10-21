@@ -5,6 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, LogOut, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Nav } from "@/components/Nav";
+import { connectGoogle } from "@/lib/googleConnect";
 import { StarCursor } from "@/components/StarCursor";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { MetricsCard } from "@/components/MetricsCard";
@@ -90,7 +91,7 @@ function AccountRow() {
         <div>
           <div className="text-[15px] font-semibold text-lumi-text">{email ?? "Demo mode"}</div>
           <div className="text-sm text-lumi-muted">
-            {session ? "Connected via Google" : "Sample data only — sign in from the landing page"}
+            {session ? "Signed in with Google" : "Sample data only — sign in from the landing page"}
           </div>
         </div>
       </div>
@@ -118,8 +119,27 @@ type ScanResult = {
   handshake: { configured: boolean; fetched: number; eventsCreated: number };
 };
 
+type GoogleGrants = { gmail: boolean; calendar: boolean };
+
+/**
+ * Gmail and Google Calendar are one optional grant on top of sign-in. The
+ * row says whether this user gave it and offers the consent screen if not;
+ * everything else on this page works without it.
+ */
 function InboxRow({ signedIn, email }: { signedIn: boolean; email: string | null }) {
   const qc = useQueryClient();
+  const [connecting, setConnecting] = useState(false);
+  const { data: grants } = useQuery({
+    queryKey: ["google-grants"],
+    queryFn: async () => {
+      const res = await fetch("/api/sources/google");
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as GoogleGrants;
+    },
+    enabled: signedIn,
+    retry: false,
+  });
+  const connected = Boolean(grants?.gmail && grants?.calendar);
   const scan = useMutation({
     mutationFn: async (): Promise<ScanResult> => {
       const res = await fetch("/api/ingest/poll", { method: "POST" });
@@ -136,12 +156,31 @@ function InboxRow({ signedIn, email }: { signedIn: boolean; email: string | null
   return (
     <>
       <Row
-        label="Connected inbox"
-        sub="Swept twice a day, 1 PM and 7 PM New York. Inbox tab only — Promotions, Social, archived and sent mail are never read."
+        label="Gmail and Google Calendar"
+        sub={
+          connected
+            ? "Swept twice a day, 1 PM and 7 PM New York. Inbox tab only — Promotions, Social, archived and sent mail are never read. Accepted events are written to your calendar."
+            : "Optional. Lets Lumi sweep your Inbox tab twice a day (read-only) and write accepted events to Google Calendar. Google may warn that Lumi is not yet verified."
+        }
       >
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <span className={`w-1.5 h-1.5 rounded-full ${signedIn ? "bg-lumi-green" : "bg-lumi-border"}`} />
-          <span className="text-lumi-text">{email ?? "Not connected"}</span>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-lumi-green" : "bg-lumi-border"}`} />
+            <span className="text-lumi-text">{connected ? email : "Not connected"}</span>
+          </div>
+          {signedIn && (
+            <button
+              onClick={() => {
+                setConnecting(true);
+                void connectGoogle("/settings");
+              }}
+              disabled={connecting}
+              className="inline-flex items-center gap-2 rounded-full bg-lumi-surface px-4 py-2 text-xs font-semibold text-lumi-text transition-transform hover:-translate-y-0.5 disabled:opacity-40"
+            >
+              {connecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              {connected ? "Reconnect" : "Connect"}
+            </button>
+          )}
         </div>
       </Row>
       <Row label="Scan now" sub="Pull new mail and your Handshake feed without waiting for the next sweep.">

@@ -1,6 +1,7 @@
 import { google, gmail_v1 } from "googleapis";
 import { simpleParser, type AddressObject, type ParsedMail } from "mailparser";
 import { getGoogleAccessToken } from "@/lib/auth";
+import { GMAIL_SCOPE } from "@/lib/googleScopes";
 import { withRetry } from "@/lib/retry";
 
 /**
@@ -44,7 +45,7 @@ export type ParsedMessage = {
 };
 
 async function clientFor(userId: string): Promise<gmail_v1.Gmail | null> {
-  const token = await getGoogleAccessToken(userId);
+  const token = await getGoogleAccessToken(userId, GMAIL_SCOPE);
   if (!token) return null;
   const oauth2 = new google.auth.OAuth2();
   oauth2.setCredentials({ access_token: token });
