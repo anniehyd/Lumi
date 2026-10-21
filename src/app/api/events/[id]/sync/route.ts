@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions, hasGoogleAccount } from "@/lib/auth";
+import { authOptions, googleGrants } from "@/lib/auth";
 import { syncEventToCalendar, unsyncEvent } from "@/lib/services/calendar";
 
 export const dynamic = "force-dynamic";
@@ -14,10 +14,10 @@ export async function POST(
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
   const { id } = await params;
-  // A user who only forwards mail has no Google Calendar to write to. That is
-  // not a failure: their calendar is the iCal subscription feed, which already
-  // carries every accepted event.
-  if (!(await hasGoogleAccount(session.user.id))) {
+  // A user who never connected Google Calendar has nothing to write to. That
+  // is not a failure: their calendar is the iCal subscription feed, which
+  // already carries every accepted event.
+  if (!(await googleGrants(session.user.id)).calendar) {
     return NextResponse.json({
       synced: false,
       reason: "no_google_calendar",

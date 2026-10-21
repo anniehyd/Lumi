@@ -39,8 +39,8 @@ export default function Landing() {
         </h1>
 
         <p className="mt-6 max-w-xl mx-auto text-lg text-lumi-muted leading-relaxed">
-          Lumi reads your inbox, pulls out the event details that matter, and
-          asks one simple question: <em>attending?</em>
+          Lumi reads the newsletters you forward it, pulls out the event details
+          that matter, and asks one simple question: <em>attending?</em>
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -48,7 +48,7 @@ export default function Landing() {
             onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
             className="group flex items-center gap-2 rounded-lg bg-lumi-accent px-5 py-3 text-sm font-semibold text-lumi-bg hover:bg-lumi-accent-hover transition-colors"
           >
-            Connect Gmail
+            Sign in with Google
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
           </button>
           <Link
@@ -58,6 +58,11 @@ export default function Landing() {
             View demo
           </Link>
         </div>
+
+        <p className="mt-4 text-xs text-lumi-subtle">
+          Sign-in asks for your name and email only. Connecting your inbox is optional;
+          you can forward newsletters to Lumi instead.
+        </p>
 
         {/* Feature triplet */}
         <div className="mt-24 grid grid-cols-1 sm:grid-cols-3 gap-6 text-left">

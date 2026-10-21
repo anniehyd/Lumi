@@ -39,11 +39,17 @@ page shows a heatmap, the best stretches ranked by how many people share
 them, and who is missing from each. The organizer picks one; it becomes an
 accepted event and syncs to their calendar.
 
+**Signing in.** Google sign-in, asking for name and email only. That is all
+anyone needs to get a forwarding address, a Handshake feed and an iCal
+subscription, which is why the OAuth app can be published without Google's
+review and without a test-user list. Gmail and Google Calendar are a
+separate grant the user gives from onboarding or Settings.
+
 **Three ways in.**
 
 | Source | How | Needs |
 |---|---|---|
-| Gmail | Lumi sweeps the inbox tab twice a day (1 PM and 7 PM New York), only mail newer than the last sweep, never Promotions, Social, archived or sent mail | Google sign-in with read-only Gmail scope |
+| Gmail | Lumi sweeps the inbox tab twice a day (1 PM and 7 PM New York), only mail newer than the last sweep, never Promotions, Social, archived or sent mail | An optional Gmail + Calendar grant after sign-in |
 | Forward to Lumi | A private `lumi+<token>@` address; forward a newsletter, or set a Gmail filter to forward automatically | Nothing. No Google permission at all |
 | Handshake | Your personal calendar export link, pulled on every sweep | The link from Handshake → Settings → Calendar export |
 
@@ -132,7 +138,7 @@ All keys live in `.env.example`.
 |---|---|---|
 | `DATABASE_URL` | Persisted, live | Defaults to the Docker Compose Postgres |
 | `NEXTAUTH_URL`, `NEXTAUTH_SECRET` | Auth | `http://localhost:3000` locally; `openssl rand -base64 32` |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Live | OAuth app with Gmail read-only and Calendar events scopes |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Live | OAuth app published to production; sign-in uses non-sensitive scopes, Gmail read-only and Calendar events are requested on connect |
 | `ANTHROPIC_API_KEY` | Extraction | Or `LLM_API_KEY` + `LLM_BASE_URL` for Qwen and any OpenAI-compatible endpoint |
 | `LLM_MODEL` | Extraction | Default `claude-haiku-4-5`; `claude*` routes to Anthropic, anything else to the compatible endpoint |
 | `LLM_COMPACT_LINKS` | Extraction | `true` (default) swaps URLs for placeholders before the model call |

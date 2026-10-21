@@ -29,8 +29,8 @@ beforeEach(() => {
   delete process.env.INGEST_MODE;
   db.$queryRaw.mockResolvedValue([{ "?column?": 1 }]);
   db.user.findMany.mockResolvedValue([
-    { id: "u1", accounts: [{ id: "a1" }] },
-    { id: "u2", accounts: [{ id: "a2" }] },
+    { id: "u1", forwardingToken: null, accounts: [{ scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events" }] },
+    { id: "u2", forwardingToken: null, accounts: [{ scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events" }] },
   ]);
   db.email.findFirst.mockResolvedValue(null);
   db.email.deleteMany.mockResolvedValue({ count: 0 });
@@ -104,11 +104,14 @@ describe("runSweep — inline mode", () => {
 });
 
 describe("runSweep — forwarding-only users", () => {
-  // u3 never signed in with Google: no Account row, only a forwarding token.
+  // u3 signed in (name and email only) and never connected Gmail; they have
+  // a forwarding token. u4 signed in and has neither, so there is nothing
+  // for the sweep to do for them.
   beforeEach(() => {
     db.user.findMany.mockResolvedValue([
-      { id: "u1", accounts: [{ id: "a1" }] },
-      { id: "u3", accounts: [] },
+      { id: "u1", forwardingToken: null, accounts: [{ scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events" }] },
+      { id: "u3", forwardingToken: "f3", accounts: [{ scope: "openid email profile" }] },
+      { id: "u4", forwardingToken: null, accounts: [{ scope: "openid email profile" }] },
     ]);
   });
 

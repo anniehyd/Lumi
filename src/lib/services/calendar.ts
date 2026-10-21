@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import { prisma } from "@/lib/db";
 import { randomBytes } from "crypto";
 import { getGoogleAccessToken } from "@/lib/auth";
+import { CALENDAR_SCOPE } from "@/lib/googleScopes";
 import { statusOf, withRetry } from "@/lib/retry";
 import { decisionDelta, recordMetrics } from "@/lib/metrics";
 
@@ -19,7 +20,7 @@ export async function listCalendarWindow(
   calendarId: string = "primary"
 ): Promise<CalendarBusySlot[] | null> {
   try {
-    const token = await getGoogleAccessToken(userId);
+    const token = await getGoogleAccessToken(userId, CALENDAR_SCOPE);
     if (!token) return null;
     const oauth2 = new google.auth.OAuth2();
     oauth2.setCredentials({ access_token: token });
@@ -71,7 +72,7 @@ export async function syncEventToCalendar(
   calendarEventId: string;
   conflicts: string[];
 } | null> {
-  const token = await getGoogleAccessToken(userId);
+  const token = await getGoogleAccessToken(userId, CALENDAR_SCOPE);
   if (!token) return null;
 
   const event = await prisma.event.findFirst({
@@ -178,7 +179,7 @@ export async function unsyncEvent(
   eventId: string,
   calendarId: string = "primary"
 ): Promise<boolean> {
-  const token = await getGoogleAccessToken(userId);
+  const token = await getGoogleAccessToken(userId, CALENDAR_SCOPE);
   if (!token) return false;
 
   const event = await prisma.event.findFirst({

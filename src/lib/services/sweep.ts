@@ -23,6 +23,7 @@ import type { IngestJob } from "@/lib/queue";
 import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { grantsFromScope } from "@/lib/googleScopes";
 
 const WINDOW_DAYS = 14;
 const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -122,18 +123,26 @@ export async function runIngestJob(job: IngestJob) {
 }
 
 /**
- * Who the sweep serves: anyone with a Google account (Gmail is polled) or a
- * forwarding address (mail is pushed; only the retry and Handshake steps
- * apply). A user with neither has no mail source and is left alone.
+ * Who the sweep serves: anyone who granted Gmail access (the inbox is
+ * polled) or has a forwarding address (mail is pushed; only the retry and
+ * Handshake steps apply). Signing in alone grants nothing, so a user with
+ * neither has no mail source and is left alone.
  */
 async function sweepUsers(): Promise<{ id: string; gmail: boolean }[]> {
   const users = await prisma.user.findMany({
     where: {
       OR: [{ accounts: { some: { provider: "google" } } }, { forwardingToken: { not: null } }],
     },
-    select: { id: true, accounts: { where: { provider: "google" }, select: { id: true }, take: 1 } },
+    select: {
+      id: true,
+      forwardingToken: true,
+      accounts: { where: { provider: "google" }, select: { scope: true }, take: 1 },
+    },
   });
-  return users.map((u) => ({ id: u.id, gmail: u.accounts.length > 0 }));
+  return users
+    .map((u) => ({ id: u.id, gmail: grantsFromScope(u.accounts[0]?.scope).gmail, forwards: !!u.forwardingToken }))
+    .filter((u) => u.gmail || u.forwards)
+    .map(({ id, gmail }) => ({ id, gmail }));
 }
 
 async function sweep() {
