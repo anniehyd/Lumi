@@ -77,6 +77,7 @@ function Stars({ value }: { value: number }) {
 export function EventCard({ event, index, focused, onAction }: Props) {
   const [skipping, setSkipping] = useState(false);
   const deadline = event.kind === "DEADLINE";
+  const maybe = event.status === "MAYBE";
   const primaryLabel = deadline ? "Remind me" : "Attend";
   const summary = event.summary ?? summaryFor(event);
   const host = event.organizerCompany ?? event.organizerName;
@@ -106,6 +107,14 @@ export function EventCard({ event, index, focused, onAction }: Props) {
           <Stars value={event.relevance ?? 3} />
           {deadline && (
             <span className="rounded-full bg-lumi-surface px-2.5 py-1 text-[12px] font-semibold text-lumi-text">Deadline</span>
+          )}
+          {maybe && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-lumi-text px-2.5 py-[3px] text-[12px] font-semibold text-lumi-text">
+              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12.5l4.5 4.5L19 7" />
+              </svg>
+              Maybe · still deciding
+            </span>
           )}
         </div>
 
@@ -184,12 +193,15 @@ export function EventCard({ event, index, focused, onAction }: Props) {
           {lead && " →"}
         </button>
         <button
-          onClick={() => onAction(event.id, "MAYBE")}
-          data-cursor="maybe later"
+          onClick={() => onAction(event.id, maybe ? "PENDING" : "MAYBE")}
+          aria-pressed={maybe}
+          data-cursor={maybe ? "un-maybe" : "maybe later"}
           data-cursor-tone="ink"
-          className="min-h-[44px] rounded-full bg-lumi-surface px-5 text-sm font-semibold text-lumi-text transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.03] active:scale-[0.98]"
+          className={`min-h-[44px] rounded-full px-5 text-sm font-semibold text-lumi-text transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.03] active:scale-[0.98] ${
+            maybe ? "border-[1.5px] border-lumi-text bg-lumi-surface" : "bg-lumi-surface"
+          }`}
         >
-          Maybe
+          {maybe ? "Maybe ✓" : "Maybe"}
         </button>
         {skipping ? (
           <div className="flex sm:flex-col flex-wrap gap-1.5 sm:pt-1" role="group" aria-label="Why skip?">

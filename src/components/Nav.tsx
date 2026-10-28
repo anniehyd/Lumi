@@ -11,10 +11,11 @@ const links = [
 ];
 
 /**
- * Top bar. `pendingCount` lets the dashboard show how many decisions are
- * waiting as the primary pill; other pages leave it off.
+ * Top bar. `pendingCount` lets the dashboard show how many untouched cards
+ * are waiting as the primary pill, and `maybeCount` how many are parked as
+ * Maybe; other pages leave both off.
  */
-export function Nav({ pendingCount }: { pendingCount?: number } = {}) {
+export function Nav({ pendingCount, maybeCount }: { pendingCount?: number; maybeCount?: number } = {}) {
   const pathname = usePathname();
   const { data: session } = useSession();
   // No signed-in user means demo mode; never show a real address as a stand-in.
@@ -47,9 +48,9 @@ export function Nav({ pendingCount }: { pendingCount?: number } = {}) {
         </nav>
 
         <div className="flex items-center gap-3">
-          {typeof pendingCount === "number" && pendingCount > 0 && (
+          {pillLabel(pendingCount, maybeCount) && (
             <span className="rounded-full bg-lumi-text px-4 py-2 text-sm font-semibold text-white">
-              {pendingCount} to decide
+              {pillLabel(pendingCount, maybeCount)}
             </span>
           )}
           {userImage ? (
@@ -67,4 +68,12 @@ export function Nav({ pendingCount }: { pendingCount?: number } = {}) {
       </div>
     </header>
   );
+}
+
+/** "7 to decide", "5 to decide · 2 maybe", "2 maybe", or nothing. */
+export function pillLabel(pending?: number, maybe?: number): string | null {
+  const parts: string[] = [];
+  if (pending) parts.push(`${pending} to decide`);
+  if (maybe) parts.push(`${maybe} maybe`);
+  return parts.length ? parts.join(" · ") : null;
 }
