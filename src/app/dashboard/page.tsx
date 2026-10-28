@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { EventFeed, pendingOf } from "@/components/EventFeed";
+import { EventFeed } from "@/components/EventFeed";
+import { countPending, pendingOf } from "@/lib/pending";
 import { Nav } from "@/components/Nav";
 import { MissReport } from "@/components/MissReport";
 import { StarCursor } from "@/components/StarCursor";
@@ -40,6 +41,7 @@ export default function Dashboard() {
   });
 
   const pending = pendingOf(events);
+  const { undecided, maybe } = countPending(pending);
   const now = Date.now();
   const onCalendar = events.filter(
     (e) => e.status === "ACCEPTED" && new Date(e.startTime).getTime() > now
@@ -48,7 +50,7 @@ export default function Dashboard() {
   return (
     <div className="lumi-custom-cursor min-h-screen flex flex-col bg-lumi-bg">
       <StarCursor />
-      <Nav pendingCount={pending.length} />
+      <Nav pendingCount={undecided} maybeCount={maybe} />
 
       <main className="flex-1 w-full max-w-[1040px] mx-auto px-6 sm:px-10 pt-10 sm:pt-16 pb-24 flex flex-col gap-16">
         <EventFeed
@@ -82,7 +84,7 @@ export default function Dashboard() {
 
         <p className="text-xs text-lumi-subtle">
           Keyboard: <Kbd>J</Kbd> <Kbd>K</Kbd> move · <Kbd>A</Kbd> attend · <Kbd>M</Kbd> maybe ·{" "}
-          <Kbd>D</Kbd> skip
+          <Kbd>D</Kbd> skip · <Kbd>Z</Kbd> undo
         </p>
       </main>
     </div>

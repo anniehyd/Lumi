@@ -1,11 +1,14 @@
 "use client";
 
-import { AnimatePresence } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { EventCard } from "@/components/EventCard";
 import { buildBrief } from "@/lib/brief";
+import { pendingOf } from "@/lib/pending";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
+
+export { pendingOf };
 
 async function fetchEvents(): Promise<MockEvent[]> {
   const res = await fetch("/api/events?limit=200");
@@ -27,13 +30,9 @@ async function patchStatus(id: string, status: EventStatus, reason?: SkipReason)
   return data.event;
 }
 
-/** Only undecided, still-upcoming events; most relevant first, soonest within a rating. */
-export function pendingOf(events: MockEvent[], now = Date.now()): MockEvent[] {
-  return events
-    .filter((e) => e.status === "PENDING" || e.status === "MAYBE")
-    .filter((e) => new Date(e.startTime).getTime() > now)
-    .sort((a, b) => (b.relevance ?? 3) - (a.relevance ?? 3) || a.startTime.localeCompare(b.startTime));
-}
+/** The last decision, kept for a few seconds so a slip of the finger can be taken back. */
+type LastDecision = { id: string; title: string; kind: MockEvent["kind"]; from: EventStatus; to: EventStatus };
+const UNDO_WINDOW_MS = 10_000;
 
 export function EventFeed({
   lastScan,
@@ -52,6 +51,8 @@ export function EventFeed({
     refetchInterval: 60_000,
   });
   const [focusIdx, setFocusIdx] = useState(0);
+  const [last, setLast] = useState<LastDecision | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mutation = useMutation({
     mutationFn: ({ id, status, reason }: { id: string; status: EventStatus; reason?: SkipReason }) =>
@@ -75,16 +76,43 @@ export function EventFeed({
 
   const setStatus = useCallback(
     (id: string, status: EventStatus, reason?: SkipReason) => {
+      const before = events.find((e) => e.id === id);
       mutation.mutate({ id, status, reason });
       setFocusIdx((i) => Math.max(0, Math.min(i, pending.length - 2)));
+      if (before && before.status !== status) {
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        setLast({ id, title: before.title, kind: before.kind, from: before.status, to: status });
+        undoTimer.current = setTimeout(() => setLast(null), UNDO_WINDOW_MS);
+      }
     },
-    [mutation, pending.length]
+    [events, mutation, pending.length]
   );
 
-  // Keyboard shortcuts: j/k navigate, a/m/d act on the focused row.
+  /** Put the last decided card back exactly as it was. */
+  const undo = useCallback(() => {
+    if (!last) return;
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    mutation.mutate({ id: last.id, status: last.from });
+    setLast(null);
+  }, [last, mutation]);
+
+  useEffect(
+    () => () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    },
+    []
+  );
+
+  // Keyboard shortcuts: j/k navigate, a/m/d act on the focused row, z takes the last one back.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        undo();
+        return;
+      }
       if (pending.length === 0) return;
       const focused = pending[focusIdx];
       if (!focused) return;
@@ -105,7 +133,7 @@ export function EventFeed({
           break;
         case "m":
           e.preventDefault();
-          setStatus(focused.id, "MAYBE");
+          setStatus(focused.id, focused.status === "MAYBE" ? "PENDING" : "MAYBE");
           break;
         case "d":
           e.preventDefault();
@@ -115,7 +143,7 @@ export function EventFeed({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pending, focusIdx, setStatus]);
+  }, [pending, focusIdx, setStatus, undo]);
 
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const scanned = lastScan
@@ -158,8 +186,51 @@ export function EventFeed({
           </AnimatePresence>
         </section>
       )}
+
+      {/* The undo line. The outer div does the centring so framer's transform on the inner one cannot fight it. */}
+      <div className="pointer-events-none fixed inset-x-4 bottom-6 z-40 flex justify-center">
+        <AnimatePresence>
+          {last && (
+            <motion.div
+              key={`${last.id}-${last.to}`}
+              role="status"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16, transition: { duration: 0.15 } }}
+              className="pointer-events-auto flex max-w-full items-center gap-3 rounded-full bg-lumi-text py-2.5 pl-5 pr-2 text-sm text-white shadow-[0_18px_40px_-16px_rgba(17,17,17,0.6)]"
+            >
+              <span className="min-w-0 truncate">
+                <span className="font-semibold">{decisionVerb(last)}</span> {last.title}
+              </span>
+              <button
+                onClick={undo}
+                data-cursor="take it back"
+                data-cursor-tone="ink"
+                className="flex shrink-0 items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 font-semibold transition-colors hover:bg-white/25"
+              >
+                Undo
+                <kbd className="rounded border border-white/30 px-1.5 py-0.5 font-sans text-[11px] font-normal">Z</kbd>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
+}
+
+/** What the undo line says happened: "Skipped", "Attending", "Maybe for"… */
+function decisionVerb({ to, kind }: LastDecision): string {
+  switch (to) {
+    case "ACCEPTED":
+      return kind === "DEADLINE" ? "Reminder set for" : "Attending";
+    case "MAYBE":
+      return "Maybe for";
+    case "DECLINED":
+      return "Skipped";
+    case "PENDING":
+      return "Back to undecided:";
+  }
 }
 
 /** The headline with one word under a highlighter stroke. */
