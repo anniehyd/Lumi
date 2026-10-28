@@ -3,8 +3,9 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Lumi — AI Email-to-Calendar",
-  description: "Scan your inbox, detect events, add them to your calendar with one click.",
+  title: "Lumi — Every invite, sorted",
+  description:
+    "Lumi reads the newsletters in a student's inbox, pulls out the events, ranks them by fit, and asks one question per event: attending? Nothing lands on your calendar until you say so.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
