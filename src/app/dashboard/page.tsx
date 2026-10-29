@@ -54,7 +54,8 @@ export default function Dashboard() {
 
       <main className="flex-1 w-full max-w-[1040px] mx-auto px-6 sm:px-10 pt-10 sm:pt-16 pb-24 flex flex-col gap-16">
         <EventFeed
-          lastScan={syncStatus?.lastIngest}
+          lastScan={syncStatus?.lastScan}
+          gmailConnected={syncStatus?.gmailConnected}
           emailsThisWeek={syncStatus?.emailsThisWeek}
           cardsThisWeek={syncStatus?.cardsThisWeek}
         />

@@ -17,5 +17,6 @@ export type ExtractedEvent = {
   kind: MockEvent["kind"];
   sourceUid?: string; // stable upstream id (ICS UID) when the source has one
   relevance?: number; // 1..5 — fit to the user's interests
+  relevanceReason?: string; // the model's one line on why, for the LLM tier
   summary?: string; // "Looks like …" one-liner; model-written for the LLM tier
 };

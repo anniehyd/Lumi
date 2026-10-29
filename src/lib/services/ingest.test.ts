@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 
 const db = vi.hoisted(() => ({
   email: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-  user: { findUnique: vi.fn() },
+  user: { findUnique: vi.fn(), update: vi.fn() },
 }));
 const gmail = vi.hoisted(() => ({ listMessages: vi.fn(), fetchMessage: vi.fn() }));
 const pipeline = vi.hoisted(() => ({ processEmail: vi.fn(), persistEvents: vi.fn() }));
@@ -71,6 +71,15 @@ describe("ingestUser", () => {
     expect(db.email.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ processed: true, skipReason: "keyword" }) })
     );
+  });
+
+  it("stamps the user's last scan even when nothing new arrived", async () => {
+    gmail.listMessages.mockResolvedValue([]);
+    await ingestUser("u1");
+    expect(db.user.update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: { lastScanAt: expect.any(Date) },
+    });
   });
 
   it("writes the funnel counters once per run", async () => {

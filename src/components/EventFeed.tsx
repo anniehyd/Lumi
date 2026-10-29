@@ -7,6 +7,8 @@ import { EventCard } from "@/components/EventCard";
 import { buildBrief } from "@/lib/brief";
 import Link from "next/link";
 import { pendingOf, upcomingOf } from "@/lib/pending";
+import { scanState } from "@/lib/scan";
+import { DEFAULT_PROFILE, normalizeProfile, type UserProfile } from "@/lib/profile";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
 
 export { pendingOf };
@@ -16,6 +18,22 @@ async function fetchEvents(): Promise<MockEvent[]> {
   if (!res.ok) throw new Error("failed to fetch events");
   const data = await res.json();
   return data.events as MockEvent[];
+}
+
+/** The interest profile the stars were judged against. Demo mode has no user, so it gets the sample's rubric. */
+async function fetchProfile(): Promise<UserProfile> {
+  const res = await fetch("/api/profile");
+  if (!res.ok) return DEFAULT_PROFILE;
+  const data = (await res.json()) as { profile: unknown };
+  return data.profile ? normalizeProfile(data.profile) : DEFAULT_PROFILE;
+}
+
+type ScanResult = { newEmails: number; eventsCreated: number; handshake?: { eventsCreated: number } };
+
+async function postScan(): Promise<ScanResult> {
+  const res = await fetch("/api/ingest/poll", { method: "POST" });
+  if (!res.ok) throw new Error(`scan failed (${res.status})`);
+  return (await res.json()) as ScanResult;
 }
 
 export type SkipReason = "not_interested" | "not_an_event" | "bad_time";
@@ -37,10 +55,13 @@ const UNDO_WINDOW_MS = 10_000;
 
 export function EventFeed({
   lastScan,
+  gmailConnected = false,
   emailsThisWeek,
   cardsThisWeek,
 }: {
+  /** When Gmail was last pulled; the date line says so, and warns once a sweep has been missed. */
   lastScan?: string | null;
+  gmailConnected?: boolean;
   emailsThisWeek?: number;
   cardsThisWeek?: number;
 }) {
@@ -50,6 +71,20 @@ export function EventFeed({
     queryFn: fetchEvents,
     // Keep the feed live: new mail lands and started events age out on their own.
     refetchInterval: 60_000,
+  });
+  const { data: profile = DEFAULT_PROFILE } = useQuery({
+    queryKey: ["profile-for-stars"],
+    queryFn: fetchProfile,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const scan = useMutation({
+    mutationFn: postScan,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["sync-status"] });
+      qc.invalidateQueries({ queryKey: ["metrics"] });
+    },
   });
   const [focusIdx, setFocusIdx] = useState(0);
   const [last, setLast] = useState<LastDecision | null>(null);
@@ -147,20 +182,53 @@ export function EventFeed({
   }, [pending, focusIdx, setStatus, undo]);
 
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  const scanned = lastScan
-    ? new Date(lastScan).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-    : null;
+  const scanned = scanState(lastScan, gmailConnected);
+  const behind = scanned.kind === "stale" || scanned.kind === "never";
 
   return (
     <div className="flex flex-col gap-8 sm:gap-10">
       <section className="flex flex-col items-start gap-2.5">
-        <p className="animate-rise [animation-delay:80ms] inline-flex items-center gap-2.5 text-sm text-lumi-muted">
-          <span className="w-2 h-2 rounded-full bg-lumi-accent" />
-          {today}
-          {scanned && ` · scanned at ${scanned}`}
-          {typeof emailsThisWeek === "number" &&
-            emailsThisWeek > 0 &&
-            ` · Lumi read ${emailsThisWeek} emails this week and showed you ${cardsThisWeek ?? 0}`}
+        <p className="animate-rise [animation-delay:80ms] inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-lumi-muted">
+          <span className={`w-2 h-2 rounded-full ${behind ? "bg-lumi-rose" : "bg-lumi-accent"}`} />
+          <span>
+            {today}
+            {scanned.kind === "fresh" && ` · ${scanned.label}`}
+            {typeof emailsThisWeek === "number" &&
+              emailsThisWeek > 0 &&
+              ` · Lumi read ${emailsThisWeek} emails this week and showed you ${cardsThisWeek ?? 0}`}
+          </span>
+          {behind && (
+            <span role="status" className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <span className="font-semibold text-lumi-rose">
+                {scanned.kind === "never"
+                  ? "Your inbox has not been read yet"
+                  : `This list may be behind your inbox: ${scanned.label}`}
+              </span>
+              {scan.isError ? (
+                <span className="text-lumi-rose">
+                  Scan failed.{" "}
+                  <Link href="/settings" className="font-semibold underline underline-offset-[3px] hover:text-lumi-text">
+                    Try from Settings
+                  </Link>
+                </span>
+              ) : (
+                <button
+                  onClick={() => scan.mutate()}
+                  disabled={scan.isPending}
+                  data-cursor="read my inbox"
+                  data-cursor-tone="blue"
+                  className="font-semibold text-lumi-accent underline underline-offset-[3px] transition-colors hover:text-lumi-text disabled:no-underline disabled:opacity-60"
+                >
+                  {scan.isPending ? "Scanning…" : "Scan now"}
+                </button>
+              )}
+            </span>
+          )}
+          {scan.isSuccess && (
+            <span className="text-lumi-text">
+              {scanSummary(scan.data)}
+            </span>
+          )}
         </p>
         <h1 className="animate-rise [animation-delay:200ms] font-serif text-[26px] sm:text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-lumi-text max-w-[40ch]">
           {isLoading ? "Reading your inbox…" : <Headline text={brief.headline} emphasis={brief.emphasis} />}
@@ -183,6 +251,7 @@ export function EventFeed({
                 event={event}
                 index={idx}
                 focused={idx === focusIdx}
+                profile={profile}
                 onAction={setStatus}
               />
             ))}
@@ -220,6 +289,13 @@ export function EventFeed({
       </div>
     </div>
   );
+}
+
+/** "3 new emails, 1 new card" after a Scan now from the date line. */
+function scanSummary(r: ScanResult): string {
+  const cards = r.eventsCreated + (r.handshake?.eventsCreated ?? 0);
+  const n = (count: number, word: string) => `${count} new ${word}${count === 1 ? "" : "s"}`;
+  return `Scanned: ${n(r.newEmails, "email")}, ${n(cards, "card")}.`;
 }
 
 /** What the undo line says happened: "Skipped", "Attending", "Maybe for"… */

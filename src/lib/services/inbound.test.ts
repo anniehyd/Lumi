@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   email: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-  user: { findUnique: vi.fn() },
+  user: { findUnique: vi.fn(), update: vi.fn() },
 }));
 const gmailApi = vi.hoisted(() => ({ listMessages: vi.fn(), fetchMessage: vi.fn() }));
 const pipeline = vi.hoisted(() => ({ processEmail: vi.fn(), persistEvents: vi.fn() }));

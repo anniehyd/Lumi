@@ -93,6 +93,9 @@ export async function ingestUser(
   }
 
   await recordMetrics(userId, counters);
+  // The dashboard's "last scanned" line and its stale warning read this stamp.
+  // A pull that found nothing new is still a pull.
+  await prisma.user.update({ where: { id: userId }, data: { lastScanAt: new Date() } });
   return result;
 }
 

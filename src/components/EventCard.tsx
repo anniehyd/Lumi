@@ -6,12 +6,16 @@ import { useState } from "react";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
 import { summaryFor } from "@/lib/brief";
 import { dueChip } from "@/lib/urgency";
+import { starNote } from "@/lib/stars";
+import { DEFAULT_PROFILE, type UserProfile } from "@/lib/profile";
 import type { SkipReason } from "@/components/EventFeed";
 
 type Props = {
   event: MockEvent;
   index: number;
   focused?: boolean;
+  /** The interest profile the stars were judged against; the star panel names its chips. */
+  profile?: UserProfile;
   onAction: (id: string, status: EventStatus, reason?: SkipReason) => void;
 };
 
@@ -41,30 +45,48 @@ function dayLabel(startISO: string, endISO?: string): string {
   return `${day} · ${t(start)}–${t(new Date(endISO))}`;
 }
 
-/** Five stars, filled to the relevance score. */
-function Stars({ value }: { value: number }) {
+/**
+ * Five stars, filled to the relevance score. Clicking them opens the line
+ * under the chips that says why: the score is a judgement against the
+ * user's own interests, and a number alone invites "says who?".
+ */
+function Stars({ value, open, panelId, onToggle }: { value: number; open: boolean; panelId: string; onToggle: () => void }) {
   const v = Math.min(5, Math.max(1, Math.round(value)));
   return (
-    <span
-      className="inline-flex items-center gap-0.5"
-      role="img"
-      aria-label={`${v} of 5 stars for you`}
-      title={`${v} of 5: how well this fits what you told Lumi you care about`}
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-controls={panelId}
+      aria-label={`${v} of 5 stars for you. ${open ? "Hide why" : "Why?"}`}
+      data-cursor={open ? "got it" : "why?"}
+      data-cursor-tone="ink"
+      className="group/stars inline-flex items-center gap-1.5 rounded-md -ml-1 px-1 py-0.5 transition-colors hover:bg-lumi-surface"
     >
-      {[1, 2, 3, 4, 5].map((i) => (
-        <svg
-          key={i}
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className={i <= v ? "text-lumi-text" : "text-[#DDDBD5]"}
-          fill="currentColor"
-        >
-          <path d="M12 2.5l2.9 6.1 6.7.8-4.9 4.6 1.3 6.6L12 17.3l-6 3.3 1.3-6.6L2.4 9.4l6.7-.8L12 2.5z" />
-        </svg>
-      ))}
-    </span>
+      <span className="inline-flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <svg
+            key={i}
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className={i <= v ? "text-lumi-text" : "text-[#DDDBD5]"}
+            fill="currentColor"
+          >
+            <path d="M12 2.5l2.9 6.1 6.7.8-4.9 4.6 1.3 6.6L12 17.3l-6 3.3 1.3-6.6L2.4 9.4l6.7-.8L12 2.5z" />
+          </svg>
+        ))}
+      </span>
+      <span
+        aria-hidden="true"
+        className={`text-[12px] font-semibold underline-offset-[3px] group-hover/stars:underline ${
+          open ? "text-lumi-text" : "text-lumi-subtle group-hover/stars:text-lumi-text"
+        }`}
+      >
+        {open ? "close" : "why?"}
+      </span>
+    </button>
   );
 }
 
@@ -75,11 +97,14 @@ function Stars({ value }: { value: number }) {
  * when it overlaps their calendar. The email itself lives one click away
  * on the event page.
  */
-export function EventCard({ event, index, focused, onAction }: Props) {
+export function EventCard({ event, index, focused, profile = DEFAULT_PROFILE, onAction }: Props) {
   const [skipping, setSkipping] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const deadline = event.kind === "DEADLINE";
   const maybe = event.status === "MAYBE";
   const due = dueChip(event);
+  const note = starNote(event, profile);
+  const starsPanelId = `stars-${event.id}`;
   const primaryLabel = deadline ? "Remind me" : "Attend";
   const summary = event.summary ?? summaryFor(event);
   const host = event.organizerCompany ?? event.organizerName;
@@ -106,7 +131,12 @@ export function EventCard({ event, index, focused, onAction }: Props) {
 
       <div className="min-w-0 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Stars value={event.relevance ?? 3} />
+          <Stars
+            value={note.score}
+            open={explaining}
+            panelId={starsPanelId}
+            onToggle={() => setExplaining((v) => !v)}
+          />
           {deadline && (
             <span className="rounded-full bg-lumi-surface px-2.5 py-1 text-[12px] font-semibold text-lumi-text">Deadline</span>
           )}
@@ -128,6 +158,39 @@ export function EventCard({ event, index, focused, onAction }: Props) {
             </span>
           )}
         </div>
+
+        {explaining && (
+          <motion.div
+            id={starsPanelId}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18 }}
+            className="max-w-[62ch] rounded-2xl bg-lumi-surface px-5 py-4 text-[15px] leading-relaxed text-lumi-text"
+          >
+            <p>
+              <span className="font-semibold">
+                {note.score} of 5 · {note.headline}.
+              </span>
+              {note.reason && ` ${note.reason}`}
+            </p>
+            {note.counts.length > 0 && (
+              <p className="mt-1.5 text-lumi-muted">
+                Counts as <span className="text-lumi-text">{note.counts.join(" · ")}</span>
+              </p>
+            )}
+            <p className="mt-1.5 text-sm text-lumi-muted">
+              Lumi scores every card against the interests you picked.{" "}
+              <Link
+                href="/settings"
+                data-cursor="your interests"
+                data-cursor-tone="blue"
+                className="font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
+              >
+                Change them →
+              </Link>
+            </p>
+          </motion.div>
+        )}
 
         <Link href={`/events/${event.id}`} className="inline-block" data-cursor="open" data-cursor-tone="ink">
           <h2

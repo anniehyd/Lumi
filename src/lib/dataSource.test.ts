@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   event: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), count: vi.fn() },
-  email: { findFirst: vi.fn() },
+  email: { findFirst: vi.fn(), count: vi.fn() },
+  user: { findUnique: vi.fn() },
+  account: { findFirst: vi.fn() },
 }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 
-import { getEmail, getEvent, listEvents, updateEvent } from "@/lib/dataSource";
+import { getEmail, getEvent, getSyncStatus, listEvents, updateEvent } from "@/lib/dataSource";
 import { mockEvents } from "@/lib/mock/events";
 
 const row = (over: Record<string, unknown> = {}) => ({
@@ -99,5 +101,42 @@ describe("updateEvent", () => {
     expect(result?.previousStatus).toBe("PENDING");
     expect(result?.event.status).toBe("ACCEPTED");
     expect(db.event.update.mock.calls[0][0]).toMatchObject({ where: { id: "ev1" }, data: { status: "ACCEPTED" } });
+  });
+});
+
+describe("getSyncStatus", () => {
+  it("reports the last Gmail pull and whether there is a Gmail to pull", async () => {
+    db.event.count.mockResolvedValue(0);
+    db.email.count.mockResolvedValue(0);
+    db.email.findFirst.mockResolvedValue({ receivedAt: new Date("2026-10-27T13:05:00Z") });
+    db.user.findUnique.mockResolvedValue({ lastScanAt: new Date("2026-10-27T17:00:00Z") });
+    db.account.findFirst.mockResolvedValue({ scope: "openid email https://www.googleapis.com/auth/gmail.readonly" });
+
+    const status = await getSyncStatus(alice);
+    expect(status).toMatchObject({
+      source: "db",
+      lastIngest: "2026-10-27T13:05:00.000Z",
+      lastScan: "2026-10-27T17:00:00.000Z",
+      gmailConnected: true,
+    });
+  });
+
+  it("has no scan to report for a sign-in-only account", async () => {
+    db.event.count.mockResolvedValue(0);
+    db.email.count.mockResolvedValue(0);
+    db.email.findFirst.mockResolvedValue(null);
+    db.user.findUnique.mockResolvedValue({ lastScanAt: null });
+    db.account.findFirst.mockResolvedValue({ scope: "openid email profile" });
+
+    const status = await getSyncStatus(alice);
+    expect(status).toMatchObject({ lastScan: null, gmailConnected: false });
+  });
+
+  it("in demo mode, treats the sample inbox as swept when its newest email arrived", async () => {
+    const status = await getSyncStatus(demoNoDb);
+    expect(status.source).toBe("mock");
+    expect(status.gmailConnected).toBe(true);
+    expect(status.lastScan).toBe(status.lastIngest);
+    expect(new Date(status.lastScan!).getTime()).toBeGreaterThan(Date.now() - 2 * 86_400_000);
   });
 });
