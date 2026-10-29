@@ -56,6 +56,9 @@ model User {
   // a user never has to grant Gmail access. Null until they open the
   // "Forward to Lumi" section in Settings; rotated on request.
   forwardingToken   String?  @unique
+  // When Gmail was last pulled for this user, by the sweep or Scan now. Null
+  // until the first pull. The dashboard warns when it is more than a day old.
+  lastScanAt       DateTime?
   // What this user wants Lumi to surface. Shape: src/lib/profile.ts UserProfile.
   // Null falls back to DEFAULT_PROFILE so extraction never breaks on a new user.
   profile          Json?
@@ -214,6 +217,9 @@ model Event {
 
   // Ranking + calendar awareness
   relevance     Int     @default(3) // 1..5 — fit to the user's interests
+  // The model's one line on why it gave that score, in terms of the user's
+  // profile. Null for ICS, schema.org and keyword tiers, which never score.
+  relevanceReason String?
   conflictTitle String? // title of the overlapping Google Calendar event, if any
 
   // Extras

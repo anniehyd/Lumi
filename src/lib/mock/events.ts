@@ -24,6 +24,7 @@ export type MockEvent = {
   rsvpLink?: string;
   sourceEmailId: string;
   relevance?: number; // 1..5 — fit to the user's interests
+  relevanceReason?: string; // why that score, in terms of the user's profile
   conflictTitle?: string; // overlapping Google Calendar event, if any
   summary?: string; // one sentence on what the event is, shown on the card
   declineReason?: string; // not_interested | not_an_event | bad_time, when the user said
@@ -322,6 +323,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(2, 12),
     endTime: inDays(2, 14),
     relevance: 5,
+    relevanceReason: "A hedge fund recruiting developers for internships, which is exactly what you asked for.",
     conflictTitle: "Linear Algebra Recitation",
     summary:
       "Marshall Wace is a London hedge fund with a large technology team; this coffee chat is where their developers talk to students about internships.",
@@ -345,6 +347,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(3, 17),
     endTime: inDays(3, 18),
     relevance: 2,
+    relevanceReason: "Big Law recruiting, outside the engineering track you described.",
     summary:
       "Weil, Gotshal & Manges is a global law firm; this session walks through what a Big Law career path looks like, open to every class year.",
     timezone: "America/New_York",
@@ -365,6 +368,7 @@ export const mockEvents: MockEvent[] = [
       "Application deadline for the Changemaker Fellowship. Grants up to $5,000 for ~35 students in public service and social impact.",
     startTime: inDays(5, 23, 59),
     relevance: 3,
+    relevanceReason: "A deadline, but for public-service grants rather than the tech internships you want.",
     summary:
       "NYU's Changemaker Fellowship funds about 35 students with grants up to $5,000 for public-service projects; this is the application deadline.",
     timezone: "America/New_York",
@@ -383,6 +387,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(8, 19, 30),
     endTime: inDays(8, 22),
     relevance: 1,
+    relevanceReason: "A private dinner with no recruiting or tech angle.",
     summary: "A black-tie dinner Sam is hosting in a private room at Quince; reply by Monday so he can confirm the table.",
     timezone: "America/Los_Angeles",
     locationName: "Quince",
@@ -402,6 +407,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(6, 10),
     endTime: inDays(6, 18),
     relevance: 5,
+    relevanceReason: "A hackathon run by a product company you could intern at.",
     timezone: "America/New_York",
     locationName: "Leslie eLab",
     locationAddress: "16 Washington Place, New York, NY 10003",
@@ -422,6 +428,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(4, 18),
     endTime: inDays(4, 20),
     relevance: 5,
+    relevanceReason: "A 48-hour hackathon with engineers from Vercel and Supabase in the room.",
     conflictTitle: "CS-UA 310 Office Hours",
     timezone: "America/New_York",
     locationName: "Kimmel 405",
@@ -441,6 +448,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(3, 19),
     endTime: inDays(3, 20),
     relevance: 3,
+    relevanceReason: "A Tech@NYU session where you would meet other builders, though it is design, not engineering.",
     timezone: "America/New_York",
     locationName: "370 Jay Street, room 1201",
     organizerName: "Tech@NYU",
@@ -458,6 +466,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(3, 19),
     endTime: inDays(3, 20, 30),
     relevance: 4,
+    relevanceReason: "An info session for software and quant internships at a trading firm.",
     timezone: "America/New_York",
     locationName: "Paulson Auditorium, Tisch Hall",
     locationAddress: "40 West 4th Street, New York, NY 10012",
@@ -478,6 +487,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(2, 18),
     endTime: inDays(2, 19),
     relevance: 2,
+    relevanceReason: "A finance teaching session, not a tech or recruiting event.",
     timezone: "America/New_York",
     locationName: "Tisch Hall T-201",
     organizerName: "NYU Quant Finance Society",
@@ -495,6 +505,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(4, 17),
     endTime: inDays(4, 18),
     relevance: 2,
+    relevanceReason: "Sales and trading recruiting, not the engineering roles you asked for.",
     timezone: "America/New_York",
     locationName: "KMC 2-60",
     organizerName: "NYU Quant Finance Society",
@@ -513,6 +524,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(18, 18),
     endTime: inDays(18, 20, 30),
     relevance: 4,
+    relevanceReason: "A tech talk on AI in product work, with people from Meta, Figma and Anthropic.",
     timezone: "America/New_York",
     locationName: "Betaworks",
     locationAddress: "29 Little West 12th Street, New York, NY 10014",
@@ -533,6 +545,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(7, 18, 30),
     endTime: inDays(7, 21),
     relevance: 2,
+    relevanceReason: "A crypto meetup with networking, but no clear link to your internship hunt.",
     timezone: "America/New_York",
     locationName: "The Yard",
     locationAddress: "157 13th Street, Brooklyn, NY 11215",
@@ -552,6 +565,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(4, 18),
     endTime: inDays(4, 19, 15),
     relevance: 4,
+    relevanceReason: "A tech talk on startups and seed funding, adjacent to what you care about.",
     timezone: "America/New_York",
     locationName: "Kaufman Management Center, Room 1-70",
     locationAddress: "44 West 4th Street, New York, NY 10012",
@@ -571,6 +585,7 @@ export const mockEvents: MockEvent[] = [
     summary: "Persona is an identity-verification startup; this is the CodeSignal assessment for their software engineering internship, about 70 minutes, and the link expires at the deadline.",
     startTime: inDays(1, 23, 59),
     relevance: 5,
+    relevanceReason: "An internship deadline for a software engineering role, which you asked never to miss.",
     timezone: "America/New_York",
     organizerName: "CodeSignal",
     organizerCompany: "Persona",
@@ -589,6 +604,7 @@ export const mockEvents: MockEvent[] = [
     startTime: inDays(9, 17),
     endTime: inDays(9, 18, 30),
     relevance: 3,
+    relevanceReason: "Recruiting for internships, with a technology team but mostly non-tech roles.",
     timezone: "America/New_York",
     locationName: "Wasserman Center, Presentation Room A",
     locationAddress: wassermanUnionSquare,

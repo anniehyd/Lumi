@@ -124,6 +124,11 @@ const TOOL_SCHEMA = {
             description:
               "How relevant this event is to the user's interests, 1 (barely) to 5 (perfect fit). Follow the relevance rubric in the system prompt.",
           },
+          relevanceReason: {
+            type: "string" as const,
+            description:
+              "Up to fifteen words on why you gave that relevance score, addressed to the user and in terms of what they said they care about, e.g. \"An internship deadline at a quant firm, which you asked for.\" or \"Big Law recruiting, outside the engineering track you described.\"",
+          },
           summary: {
             type: "string" as const,
             description:
@@ -405,8 +410,17 @@ export function normalizeEvents(payload: unknown, links: string[] = []): Extract
     confidence: clampConfidence(e.confidence),
     kind: KINDS.includes(e.kind as ExtractedEvent["kind"]) ? (e.kind as ExtractedEvent["kind"]) : "MEETING",
     relevance: clampRelevance(e.relevance),
+    relevanceReason: cleanReason(e.relevanceReason),
     summary: cleanSummary(e.summary),
   }));
+}
+
+/** The model's line on the score, trimmed, or undefined when it wrote nothing usable. */
+export function cleanReason(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length < 6 || text.length > 160) return undefined;
+  return text;
 }
 
 /** A one-liner the card can show as-is, or undefined so the template fills in. */

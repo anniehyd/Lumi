@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { mockEvents, mockEmails } from "@/lib/mock/events";
 import type { MockEvent, MockEmail } from "@/lib/mock/events";
 import type { Viewer } from "@/lib/apiAuth";
+import { grantsFromScope } from "@/lib/googleScopes";
 
 /**
  * Data access for the UI routes, scoped to one viewer.
@@ -38,6 +39,7 @@ function dbEventToMock(e: {
   rsvpLink: string | null;
   emailId: string | null;
   relevance: number;
+  relevanceReason?: string | null;
   conflictTitle: string | null;
   summary: string | null;
 }): MockEvent {
@@ -60,6 +62,7 @@ function dbEventToMock(e: {
     rsvpLink: e.rsvpLink ?? undefined,
     sourceEmailId: e.emailId ?? "",
     relevance: e.relevance,
+    relevanceReason: e.relevanceReason ?? undefined,
     conflictTitle: e.conflictTitle ?? undefined,
     summary: e.summary ?? undefined,
   };
@@ -208,19 +211,38 @@ export type SyncStatus = {
   dbConnected: boolean;
   eventCount: number;
   pendingCount: number;
+  /** When the newest email Lumi holds arrived. */
   lastIngest: string | null;
+  /** When Gmail was last pulled (sweep or Scan now); null before the first pull. */
+  lastScan: string | null;
+  /** Whether a pull can happen at all: forwarding-only users have no sweep to be late. */
+  gmailConnected: boolean;
   /** Emails Lumi read and cards it made in the last seven days. */
   emailsThisWeek: number;
   cardsThisWeek: number;
   source: "db" | "mock";
 };
 
+/**
+ * The most recent arrival in the sample inbox, which the demo treats as its
+ * last sweep. Sample mail is dated relative to today, so one that has not
+ * "arrived" yet is skipped: a sweep cannot have happened this afternoon.
+ */
+function newestMockEmail(now = Date.now()): string | null {
+  let best: string | null = null;
+  for (const e of mockEmails) {
+    const at = new Date(e.receivedAt).getTime();
+    if (at <= now && (!best || at > new Date(best).getTime())) best = e.receivedAt;
+  }
+  return best;
+}
+
 export async function getSyncStatus(viewer: Viewer): Promise<SyncStatus> {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   try {
     const userId = viewer.userId;
     if (!userId) throw new Error("no user");
-    const [eventCount, pendingCount, lastEmail, emailsThisWeek, cardsThisWeek] = await Promise.all([
+    const [eventCount, pendingCount, lastEmail, emailsThisWeek, cardsThisWeek, user, account] = await Promise.all([
       prisma.event.count({ where: { userId } }),
       prisma.event.count({ where: { userId, status: "PENDING" } }),
       prisma.email.findFirst({
@@ -230,25 +252,42 @@ export async function getSyncStatus(viewer: Viewer): Promise<SyncStatus> {
       }),
       prisma.email.count({ where: { userId, receivedAt: { gte: weekAgo } } }),
       prisma.event.count({ where: { userId, createdAt: { gte: weekAgo } } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { lastScanAt: true } }),
+      prisma.account.findFirst({ where: { userId, provider: "google" }, select: { scope: true } }),
     ]);
     return {
       dbConnected: true,
       eventCount,
       pendingCount,
       lastIngest: lastEmail?.receivedAt.toISOString() ?? null,
+      lastScan: user?.lastScanAt?.toISOString() ?? null,
+      gmailConnected: grantsFromScope(account?.scope).gmail,
       emailsThisWeek,
       cardsThisWeek,
       source: "db",
     };
   } catch {
     if (!mocksAllowed(viewer)) {
-      return { dbConnected: false, eventCount: 0, pendingCount: 0, lastIngest: null, emailsThisWeek: 0, cardsThisWeek: 0, source: "db" };
+      return {
+        dbConnected: false,
+        eventCount: 0,
+        pendingCount: 0,
+        lastIngest: null,
+        lastScan: null,
+        gmailConnected: false,
+        emailsThisWeek: 0,
+        cardsThisWeek: 0,
+        source: "db",
+      };
     }
     return {
       dbConnected: false,
       eventCount: mockEvents.length,
       pendingCount: mockEvents.filter((e) => e.status === "PENDING").length,
-      lastIngest: mockEmails[0]?.receivedAt ?? null,
+      lastIngest: newestMockEmail(),
+      // The sample inbox was swept when its newest email arrived.
+      lastScan: newestMockEmail(),
+      gmailConnected: true,
       // The sample is "one week of inbox": every email counts as read, every
       // event as a card that was made.
       emailsThisWeek: 61,
