@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { EventCard } from "@/components/EventCard";
 import { buildBrief } from "@/lib/brief";
-import { pendingOf } from "@/lib/pending";
+import Link from "next/link";
+import { pendingOf, upcomingOf } from "@/lib/pending";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
 
 export { pendingOf };
@@ -171,6 +172,8 @@ export function EventFeed({
         )}
       </section>
 
+      {!isLoading && pending.length === 0 && <UpNext events={events} />}
+
       {!isLoading && pending.length > 0 && (
         <section className="flex flex-col border-b border-lumi-border">
           <AnimatePresence mode="popLayout">
@@ -233,6 +236,70 @@ function decisionVerb({ to, kind }: LastDecision): string {
   }
 }
 
+/**
+ * What the page shows once every card is decided: the next few things on
+ * the calendar, so opening Lumi on a quiet morning still answers "what's
+ * coming?". With nothing accepted yet it points at the ways mail gets in.
+ */
+function UpNext({ events }: { events: MockEvent[] }) {
+  const next = useMemo(() => upcomingOf(events), [events]);
+
+  if (next.length === 0) {
+    return (
+      <p className="animate-rise [animation-delay:400ms] max-w-[52ch] text-[15px] leading-relaxed text-lumi-muted">
+        Nothing on your calendar yet. Forward a newsletter to your Lumi address, or connect
+        Gmail and Handshake in{" "}
+        <Link href="/settings" className="font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text">
+          Settings
+        </Link>
+        .
+      </p>
+    );
+  }
+
+  return (
+    <section className="animate-rise [animation-delay:400ms] flex flex-col gap-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-lumi-subtle">Coming up</p>
+      <ol className="flex flex-col border-t border-lumi-border">
+        {next.map((e) => (
+          <li
+            key={e.id}
+            className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-x-6 gap-y-1 border-b border-lumi-border py-5"
+          >
+            <span className="text-[15px] font-semibold tabular-nums text-lumi-text">{whenLabel(e.startTime)}</span>
+            <div className="min-w-0">
+              <Link
+                href={`/events/${e.id}`}
+                data-cursor="open"
+                data-cursor-tone="ink"
+                className="font-serif text-[22px] font-medium leading-tight tracking-[-0.02em] text-lumi-text transition-colors hover:text-lumi-accent"
+              >
+                {e.title}
+              </Link>
+              {e.locationName && <p className="mt-1 text-sm text-lumi-muted">{e.locationName}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+      <Link
+        href="/calendar"
+        data-cursor="calendar"
+        data-cursor-tone="blue"
+        className="self-start text-sm font-semibold text-lumi-accent underline underline-offset-[3px] hover:text-lumi-text"
+      >
+        Full calendar →
+      </Link>
+    </section>
+  );
+}
+
+function whenLabel(iso: string): string {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: d.getMinutes() ? "2-digit" : undefined });
+  return `${day} · ${time}`;
+}
+
 /** The headline with one word under a highlighter stroke. */
 function Headline({ text, emphasis }: { text: string; emphasis: string | null }) {
   if (!emphasis) return <>{text}</>;
@@ -240,7 +307,11 @@ function Headline({ text, emphasis }: { text: string; emphasis: string | null })
   if (at < 0) return <>{text}</>;
   const before = text.slice(0, at);
   const word = text.slice(at, at + emphasis.length);
-  const after = text.slice(at + emphasis.length);
+  const rest = text.slice(at + emphasis.length);
+  // Punctuation right after the word stays inside the inline block, so a
+  // narrow screen never wraps a lone full stop onto the next line.
+  const tail = rest.match(/^[.,!?;:]+/)?.[0] ?? "";
+  const after = rest.slice(tail.length);
   return (
     <>
       {before}
@@ -250,6 +321,7 @@ function Headline({ text, emphasis }: { text: string; emphasis: string | null })
           className="animate-mark absolute -left-0.5 -right-1 bottom-[3px] h-[36%] rounded-sm bg-lumi-mark origin-left"
         />
         <span className="relative">{word}</span>
+        {tail && <span className="relative not-italic font-normal">{tail}</span>}
       </span>
       {after}
     </>

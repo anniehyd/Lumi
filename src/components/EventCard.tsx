@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
 import { summaryFor } from "@/lib/brief";
+import { dueChip } from "@/lib/urgency";
 import type { SkipReason } from "@/components/EventFeed";
 
 type Props = {
@@ -78,6 +79,7 @@ export function EventCard({ event, index, focused, onAction }: Props) {
   const [skipping, setSkipping] = useState(false);
   const deadline = event.kind === "DEADLINE";
   const maybe = event.status === "MAYBE";
+  const due = dueChip(event);
   const primaryLabel = deadline ? "Remind me" : "Attend";
   const summary = event.summary ?? summaryFor(event);
   const host = event.organizerCompany ?? event.organizerName;
@@ -107,6 +109,15 @@ export function EventCard({ event, index, focused, onAction }: Props) {
           <Stars value={event.relevance ?? 3} />
           {deadline && (
             <span className="rounded-full bg-lumi-surface px-2.5 py-1 text-[12px] font-semibold text-lumi-text">Deadline</span>
+          )}
+          {due && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-lumi-mark px-2.5 py-1 text-[12px] font-semibold text-lumi-text">
+              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              {due}
+            </span>
           )}
           {maybe && (
             <span className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-lumi-text px-2.5 py-[3px] text-[12px] font-semibold text-lumi-text">
