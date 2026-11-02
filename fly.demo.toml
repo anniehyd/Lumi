@@ -1,17 +1,21 @@
 app = "lumi-demo"
 primary_region = "ewr"
 
-# Public demo: no Google OAuth and no database, so every route serves the
-# seeded mock inbox (src/lib/dataSource.ts) and decisions live in process
-# memory until the machine stops. Nothing here is real mail. The live app is
-# fly.live.toml.
+# Public demo: no Google OAuth, so there is nobody to sign in as and every
+# route serves the one seeded account (LUMI_DEMO_USER_EMAIL, made by
+# scripts/seed-demo-user.ts) out of its own database on the lumi-db cluster.
+# Mail reaches it through the forwarding webhook, so the cards are what the
+# real pipeline made of real newsletters. The live app is fly.live.toml.
 
 [build]
+
+[deploy]
+  release_command = "npx prisma db push --skip-generate"
 
 [env]
   NODE_ENV = "production"
   NEXTAUTH_URL = "https://lumi-demo.fly.dev"
-  LUMI_USE_MOCK_FALLBACK = "true"
+  LUMI_USE_MOCK_FALLBACK = "false"
   INGEST_MODE = "inline"
 
 [http_service]
