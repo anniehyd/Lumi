@@ -22,6 +22,7 @@ primary_region = "ewr"
   NEXTAUTH_URL = "https://lumi-live.fly.dev"
   LUMI_USE_MOCK_FALLBACK = "false"
   INGEST_MODE = "inline"
+  LUMI_DEMO_URL = "https://lumi-demo.fly.dev"
 
 [http_service]
   internal_port = 3000
