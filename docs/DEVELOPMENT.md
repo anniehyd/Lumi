@@ -33,7 +33,7 @@ GOOGLE_CLIENT_ID= DATABASE_URL= npm run dev
 ## Persisted and live
 
 ```bash
-cp .env.example .env        # fill in what the mode needs; see the README's variable table
+cp .env.example .env        # fill in what the mode needs; see the table below
 docker compose up -d        # Postgres on 5432 (Redis only matters with INGEST_MODE=queue)
 npx prisma db push
 npm run db:seed             # optional: the newsletter sample into the database
@@ -54,3 +54,87 @@ npm run lint
 npm run test:run        # 350+ tests on mocks and fixtures; any network call throws
 npm run eval:prefilter  # replay eval/golden through the pre-filter
 ```
+
+## Environment variables
+
+All keys live in `.env.example`.
+
+| Variable | Needed for | Notes |
+|---|---|---|
+| `DATABASE_URL` | Persisted, live | Defaults to the Docker Compose Postgres |
+| `NEXTAUTH_URL`, `NEXTAUTH_SECRET` | Auth | The app's public address; `openssl rand -base64 32` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Live | OAuth app published to production; sign-in uses non-sensitive scopes, Gmail read-only and Calendar events are requested on connect |
+| `ANTHROPIC_API_KEY` | Extraction | Or `LLM_API_KEY` + `LLM_BASE_URL` for Qwen and any OpenAI-compatible endpoint |
+| `LLM_MODEL` | Extraction | Default `claude-haiku-4-5`; `claude*` routes to Anthropic, anything else to the compatible endpoint |
+| `LLM_COMPACT_LINKS` | Extraction | `true` (default) swaps URLs for placeholders before the model call |
+| `PREFILTER_SENDER_HISTORY` | Detection | `true` (default) mutes bulk senders that never produce events |
+| `INGEST_MODE` | Sweeps | `inline` (default, no Redis) or `queue` (BullMQ, needs `REDIS_URL`) |
+| `INGEST_GMAIL_FILTER` | Gmail | Gmail search terms bounding what Lumi may read; default inbox only |
+| `INGEST_SWEEP_TIMES`, `INGEST_SWEEP_TZ` | Worker | Default `13:00,19:00` in `America/New_York`; empty disables |
+| `CRON_SECRET` | External sweeps | Enables `POST /api/cron/sweep`; unset returns 503 |
+| `INBOUND_EMAIL_DOMAIN` | Forwarding | Domain of the `lumi+<token>@` addresses, MX pointed at Postmark; empty hides the feature |
+| `INBOUND_WEBHOOK_SECRET` | Forwarding | Shared secret Postmark presents on `POST /api/ingest/inbound` |
+| `HANDSHAKE_ICS_URL` | Handshake | Single-user fallback; the per-user link is set in Settings |
+| `GMAIL_PUBSUB_TOPIC`, `GMAIL_WEBHOOK_SECRET` | Gmail push | Optional; present in the code, not activated |
+| `CALENDAR_FEED_TOKEN`, `CALENDAR_FEED_EMAIL` | Legacy feed | Only for subscriptions made before per-user feed links |
+| `LUMI_DEMO_USER_EMAIL` | Demo | Which account demo mode shows when the database has several |
+| `LUMI_USE_MOCK_FALLBACK` | Demo | `true` (default) serves sample data when there is no database |
+| `LUMI_DEMO_URL` | Landing page | Origin of a separate demo deployment; the demo links go there. Unset keeps them on this host |
+
+## API
+
+| Route | Purpose |
+|---|---|
+| `GET /api/events` | Events, optional `?status=PENDING` |
+| `GET/PATCH /api/events/[id]` | One event; PATCH changes status and drives calendar sync |
+| `GET /api/events/[id]/ics` | One event as `.ics` |
+| `POST/DELETE /api/events/[id]/sync` | Write to or remove from Google Calendar |
+| `GET /api/emails/[id]` | The email an event came from |
+| `GET /api/calendar.ics?token=…` | Per-user iCal feed of accepted and maybe events |
+| `GET/POST /api/calendar-feed` | Mint or rotate the signed-in user's feed link |
+| `POST /api/meet`, `GET /api/meet` | Create a poll; list yours |
+| `GET /api/meet/[slug]` | Poll, every answer, ranked common times |
+| `PUT /api/meet/[slug]/respond` | Save one person's free slots, no account |
+| `POST /api/meet/[slug]/final` | Owner picks the time; synced to their calendar |
+| `GET /api/meet/[slug]/final.ics` | The picked time as `.ics`, for everyone else |
+| `GET/PUT /api/profile` | Interest profile and onboarding flag |
+| `GET /api/metrics` | Signed-in user's funnel, `?days=7` |
+| `GET/POST /api/miss` | "Lumi missed something" reports |
+| `GET /api/sync/status` | Last scan and database connectivity |
+| `POST /api/ingest/poll` | Scan now: Gmail plus Handshake |
+| `POST /api/ingest/inbound` | Postmark inbound webhook for forwarded mail |
+| `GET/POST /api/sources/forwarding` | The user's forwarding address; POST rotates it |
+| `GET/PUT/DELETE /api/sources/handshake` | Connect or disconnect the Handshake feed |
+| `POST /api/cron/sweep` | Run a sweep, bearer `CRON_SECRET` |
+
+## Project structure
+
+```
+prisma/schema.prisma      database schema
+src/app/                  landing page and public poll pages
+src/app/(signed-in)/      dashboard, calendar, events, onboarding, settings, behind the session check
+src/app/api/              routes listed above
+src/components/           Landing, EventFeed, EventCard, MeetGrid, StarCursor, Nav, ProfileEditor, MetricsCard
+src/lib/brief.ts          the "Looks like…" headline and per-event fallback sentence
+src/lib/meet.ts           poll grid, slot keys, best-time ranking
+src/lib/meetStore.ts      Prisma or in-memory poll storage
+src/lib/detection/        ics, schema.org, keyword gate, pre-filter
+src/lib/services/         gmail, inbound, ingest, detect, extract, calendar, sweep, handshake
+src/lib/                  auth, apiAuth, dataSource, feedToken, forwardingToken, metrics, retry, profile
+scripts/                  seed, weekly metrics, golden-set snapshot, extractor A/B, pre-filter replay
+docs/                     architecture, metrics, handshake, development, screenshots
+```
+
+## Deploying
+
+Lumi runs as a single web service plus Postgres. Inbox checks are triggered
+by any scheduler calling `POST /api/cron/sweep` with the `CRON_SECRET`
+bearer token, so no background worker or queue is required, and the web
+machine can stop when idle.
+
+- **Fly.io.** `fly.live.toml` is a production config (Google sign-in,
+  Postgres, scheduled checks). `fly.demo.toml` serves the sample inbox with no
+  database and no sign-in. Never point a demo deployment at real mail: it has
+  no sign-in, so anything in its database is public.
+- **Single server with Docker.** See [DEPLOY.md](../DEPLOY.md), which also
+  covers the Google OAuth setup every deployment needs.
