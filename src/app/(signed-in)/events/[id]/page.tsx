@@ -23,6 +23,7 @@ import {
 import { Nav } from "@/components/Nav";
 import type { EventStatus, MockEvent, MockEmail } from "@/lib/mock/events";
 
+import { allDayDate } from "@/lib/zonedTime";
 async function fetchEvent(id: string): Promise<MockEvent> {
   const res = await fetch(`/api/events/${id}`);
   if (res.status === 404) throw new Error("not-found");
@@ -209,18 +210,24 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
             <DetailField
               icon={<Calendar className="w-4 h-4" />}
               label="Date"
-              value={start.toLocaleDateString("en-US", {
+              value={
+                event.isAllDay
+                  ? allDayDate(event.startTime, event.timezone, "EEEE, MMMM d, yyyy")
+                  : start.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
                 year: "numeric",
-              })}
+              })
+              }
             />
             <DetailField
               icon={<Clock className="w-4 h-4" />}
               label="Time"
               value={
-                end
+                event.isAllDay
+                  ? "All day"
+                  : end
                   ? `${start.toLocaleTimeString("en-US", {
                       hour: "numeric",
                       minute: "2-digit",

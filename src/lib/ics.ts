@@ -1,4 +1,5 @@
 import type { MockEvent } from "@/lib/mock/events";
+import { addCalendarDays, allDayDate } from "@/lib/zonedTime";
 
 // RFC 5545 iCalendar serialization.
 // Text fields: escape \\, \n, ;, , per spec. Long lines folded at 75 chars.
@@ -39,6 +40,13 @@ function formatDateUTC(iso: string): string {
   );
 }
 
+function allDayTiming(event: MockEvent): string[] {
+  const first = allDayDate(event.startTime, event.timezone, "yyyy-MM-dd");
+  const last = event.endTime ? allDayDate(event.endTime, event.timezone, "yyyy-MM-dd") : "";
+  const after = last > first ? last : addCalendarDays(first, 1);
+  return [`DTSTART;VALUE=DATE:${first.replace(/-/g, "")}`, `DTEND;VALUE=DATE:${after.replace(/-/g, "")}`];
+}
+
 function eventBlock(event: MockEvent): string[] {
   const now = formatDateUTC(new Date().toISOString());
   const start = formatDateUTC(event.startTime);
@@ -50,12 +58,17 @@ function eventBlock(event: MockEvent): string[] {
     .filter(Boolean)
     .join(", ");
 
+  // All-day events are dates in iCal (DTEND exclusive), never midnight-to-
+  // midnight times, so every calendar app files them under the right day.
+  const timing = event.isAllDay
+    ? allDayTiming(event)
+    : [`DTSTART:${start}`, `DTEND:${end}`];
+
   const lines = [
     "BEGIN:VEVENT",
     `UID:${event.id}@lumi.app`,
     `DTSTAMP:${now}`,
-    `DTSTART:${start}`,
-    `DTEND:${end}`,
+    ...timing,
     `SUMMARY:${escape(event.title)}`,
     event.description && `DESCRIPTION:${escape(event.description)}`,
     locationParts && `LOCATION:${escape(locationParts)}`,

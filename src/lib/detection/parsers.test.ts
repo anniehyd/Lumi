@@ -57,6 +57,21 @@ describe("parseIcs", () => {
     expect(events[0].title).toBe("Untitled event");
   });
 
+  it("hands back an all-day event as a date, flagged all day", () => {
+    const [e] = parseIcs(calendar(vevent(["UID:d1", "DTSTART;VALUE=DATE:20301105", "DTEND;VALUE=DATE:20301106", "SUMMARY:Career fair"])));
+    expect(e).toMatchObject({ startTime: "2030-11-05", endTime: "2030-11-06", isAllDay: true, timezone: "" });
+  });
+
+  it("hands back a floating time as wall-clock time for the user's zone", () => {
+    const [e] = parseIcs(calendar(vevent(["UID:f1", "DTSTART:20301105T180000", "SUMMARY:Mixer"])));
+    expect(e).toMatchObject({ startTime: "2030-11-05T18:00:00", timezone: "", isAllDay: false });
+  });
+
+  it("keeps a zoned time absolute, with its zone", () => {
+    const [e] = parseIcs(calendar(vevent(["UID:z1", "DTSTART;TZID=America/New_York:20301105T180000", "SUMMARY:Talk"])));
+    expect(e).toMatchObject({ startTime: "2030-11-05T23:00:00.000Z", timezone: "America/New_York", isAllDay: false });
+  });
+
   it("returns nothing for garbage", () => {
     expect(parseIcs("this is not a calendar")).toEqual([]);
     expect(parseIcs("")).toEqual([]);

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The inbound-forwarding path, driven from fixtures only. Nothing here talks
@@ -24,7 +24,7 @@ vi.mock("@/lib/services/gmail", async (importOriginal) => ({
 vi.mock("@/lib/services/detect", () => pipeline);
 vi.mock("@/lib/metrics", () => ({ recordMetrics: metrics }));
 
-import { parseRawMessage } from "@/lib/services/gmail";
+import { parseRawMessage, receivedAtFrom } from "@/lib/services/gmail";
 import { ingestInbound, ingestUser } from "@/lib/services/ingest";
 import {
   checkInboundSecret,
@@ -89,6 +89,15 @@ describe("secret check", () => {
 });
 
 describe("parsePostmarkInbound", () => {
+  // The fixtures are dated 2099 so their events stay in the future. A Date
+  // header later than "now" is replaced with now (receivedAtFrom), so these
+  // tests run with the clock just after the fixture's date.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2099-09-16T00:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("parses the raw message when Postmark includes it", async () => {
     const parsed = await parsePostmarkInbound({ ...POSTMARK, RawEmail: NEWSLETTER });
     expect(parsed).toMatchObject({
@@ -197,6 +206,15 @@ describe("parseGmailForwardingConfirmation", () => {
 });
 
 describe("ingestInbound", () => {
+  // The fixtures are dated 2099 so their events stay in the future. A Date
+  // header later than "now" is replaced with now (receivedAtFrom), so these
+  // tests run with the clock just after the fixture's date.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2099-09-16T00:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("stores the same Email row the Gmail path stores for the same message", async () => {
     // Gmail path: the sweep lists one id and downloads this exact raw message.
     gmailApi.listMessages.mockResolvedValue(["g1"]);
@@ -279,5 +297,28 @@ describe("ingestInbound", () => {
       where: { id: "row-newsletter-2099-09-15@lists.nyu.edu" },
       data: { attempts: { increment: 1 } },
     });
+  });
+});
+
+describe("receivedAtFrom", () => {
+  const now = new Date("2026-11-02T12:00:00Z");
+
+  it("keeps a Date header in the past", () => {
+    const header = new Date("2026-11-01T09:00:00Z");
+    expect(receivedAtFrom(header, now)).toBe(header);
+  });
+
+  it("replaces a Date header in the future with now, so it cannot stall the next query", () => {
+    expect(receivedAtFrom(new Date("2030-01-01T00:00:00Z"), now)).toBe(now);
+  });
+
+  it("tolerates a few minutes of clock skew", () => {
+    const header = new Date(now.getTime() + 2 * 60 * 1000);
+    expect(receivedAtFrom(header, now)).toBe(header);
+  });
+
+  it("uses now for a missing or unreadable header", () => {
+    expect(receivedAtFrom(undefined, now)).toBe(now);
+    expect(receivedAtFrom(new Date("nope"), now)).toBe(now);
   });
 });

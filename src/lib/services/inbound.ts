@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { parseRawMessage, type ParsedMessage } from "@/lib/services/gmail";
+import { parseRawMessage, receivedAtFrom, type ParsedMessage } from "@/lib/services/gmail";
 
 /**
  * Inbound email by forwarding — the path for users who grant no Gmail access.
@@ -147,7 +147,7 @@ export async function parsePostmarkInbound(payload: PostmarkInbound): Promise<Pa
     gmailId: "",
     from,
     subject: payload.Subject ?? "",
-    receivedAt: Number.isNaN(date.getTime()) ? new Date() : date,
+    receivedAt: receivedAtFrom(date),
     bodyText: payload.TextBody ?? "",
     bodyHtml: payload.HtmlBody ?? "",
     hasIcs: !!icsContent,

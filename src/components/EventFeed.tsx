@@ -11,6 +11,7 @@ import { scanState } from "@/lib/scan";
 import { DEFAULT_PROFILE, normalizeProfile, type UserProfile } from "@/lib/profile";
 import type { MockEvent, EventStatus } from "@/lib/mock/events";
 
+import { allDayDate } from "@/lib/zonedTime";
 export { pendingOf };
 
 async function fetchEvents(): Promise<MockEvent[]> {
@@ -342,7 +343,7 @@ function UpNext({ events }: { events: MockEvent[] }) {
             key={e.id}
             className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-x-6 gap-y-1 border-b border-lumi-border py-5"
           >
-            <span className="text-[15px] font-semibold tabular-nums text-lumi-text">{whenLabel(e.startTime)}</span>
+            <span className="text-[15px] font-semibold tabular-nums text-lumi-text">{e.isAllDay ? `${allDayDate(e.startTime, e.timezone)} · All day` : whenLabel(e.startTime)}</span>
             <div className="min-w-0">
               <Link
                 href={`/events/${e.id}`}

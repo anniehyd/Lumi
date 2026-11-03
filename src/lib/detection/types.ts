@@ -3,9 +3,12 @@ import type { MockEvent } from "@/lib/mock/events";
 export type ExtractedEvent = {
   title: string;
   description: string;
-  startTime: string; // ISO 8601
-  endTime?: string;  // ISO 8601
-  timezone: string;
+  // ISO 8601. With an offset or Z it is absolute; without one it is wall-clock
+  // time in `timezone`; a bare date (2026-11-05) means all day.
+  startTime: string;
+  endTime?: string;  // same forms; for all-day events the day after the last day
+  timezone: string;  // IANA zone, or empty for the user's own zone
+  isAllDay?: boolean;
   locationName?: string;
   locationAddress?: string;
   organizerName?: string;

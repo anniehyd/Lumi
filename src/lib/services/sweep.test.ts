@@ -22,7 +22,7 @@ vi.mock("@/lib/services/gmail", () => ({ MAIL_FILTER: "in:inbox" }));
 // If inline mode ever reached for the queue, this is what it would hit.
 vi.mock("@/lib/queue", () => ({ ingestQueue: () => ({ add: queueAdd }) }));
 
-import { ingestMode, queryFor, runIngestJob, runSweep } from "@/lib/services/sweep";
+import { ingestMode, queryFor, runIngestJob, runSweep, purge } from "@/lib/services/sweep";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -64,6 +64,32 @@ describe("queryFor", () => {
     db.email.findFirst.mockResolvedValue({ receivedAt: latest });
     const after = Math.floor((latest.getTime() - 3600_000) / 1000);
     expect(await queryFor("u1")).toBe(`after:${after} in:inbox`);
+  });
+});
+
+describe("queryFor — mail dated in the future", () => {
+  it("never lets a row dated in the future set the floor", async () => {
+    await queryFor("u1");
+    const where = db.email.findFirst.mock.calls[0][0].where;
+    expect(where.userId).toBe("u1");
+    expect(where.receivedAt.lte.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+});
+
+describe("purge", () => {
+  it("keeps a decided event until it has happened, however long ago it was decided", async () => {
+    await purge();
+    const or = db.event.deleteMany.mock.calls[0][0].where.OR as Record<string, unknown>[];
+    // No rule deletes by updatedAt: an event accepted today for next month stays.
+    expect(or.some((rule) => "updatedAt" in rule)).toBe(false);
+    expect(or).toContainEqual({ startTime: { lt: expect.any(Date) } });
+  });
+
+  it("keeps an undecided all-day event until its day is over", async () => {
+    await purge();
+    const or = db.event.deleteMany.mock.calls[0][0].where.OR as Record<string, unknown>[];
+    expect(or).toContainEqual({ status: { in: ["PENDING", "MAYBE"] }, isAllDay: true, endTime: { lt: expect.any(Date) } });
+    expect(or).toContainEqual({ status: { in: ["PENDING", "MAYBE"] }, isAllDay: false, startTime: { lt: expect.any(Date) } });
   });
 });
 

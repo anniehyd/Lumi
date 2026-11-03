@@ -365,3 +365,34 @@ describe("dedup helpers", () => {
     expect(dedupHash("Fall Mixer", day, "IEEE")).not.toBe(a);
   });
 });
+
+describe("persistEvents — time zones", () => {
+  const created = () => db.event.create.mock.calls[0][0].data;
+
+  it("reads a time with no offset in the event's zone", async () => {
+    await persistEvents("u1", "e1", [event({ startTime: "2099-11-05T18:00:00", timezone: "America/New_York" })], "LLM");
+    expect(created().startTime.toISOString()).toBe("2099-11-05T23:00:00.000Z");
+    expect(created().date).toBe("2099-11-05");
+    expect(created().isAllDay).toBe(false);
+  });
+
+  it("falls back to the user's zone when the event has none", async () => {
+    db.user.findUnique.mockResolvedValue({ timezone: "America/Los_Angeles" });
+    await persistEvents("u1", null, [event({ startTime: "2099-11-05T18:00:00", timezone: "" })], "ICS", "HANDSHAKE");
+    expect(created().startTime.toISOString()).toBe("2099-11-06T02:00:00.000Z");
+    expect(created().timezone).toBe("America/Los_Angeles");
+  });
+
+  it("stores a bare date as an all-day event on that date, ending the next midnight", async () => {
+    await persistEvents("u1", "e1", [event({ startTime: "2099-11-05", timezone: "America/New_York" })], "LLM");
+    expect(created()).toMatchObject({ date: "2099-11-05", isAllDay: true });
+    expect(created().startTime.toISOString()).toBe("2099-11-05T05:00:00.000Z");
+    expect(created().endTime.toISOString()).toBe("2099-11-06T05:00:00.000Z");
+  });
+
+  it("keeps an all-day event for today, which a start-time check would drop", async () => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    await persistEvents("u1", "e1", [event({ startTime: today, timezone: "America/New_York" })], "LLM");
+    expect(db.event.create).toHaveBeenCalledTimes(1);
+  });
+});

@@ -32,6 +32,7 @@ function dbEventToMock(e: {
   startTime: Date;
   endTime: Date | null;
   timezone: string;
+  isAllDay?: boolean;
   locationName: string | null;
   locationAddress: string | null;
   organizerName: string | null;
@@ -55,6 +56,7 @@ function dbEventToMock(e: {
     startTime: e.startTime.toISOString(),
     endTime: e.endTime?.toISOString(),
     timezone: e.timezone,
+    isAllDay: e.isAllDay ?? false,
     locationName: e.locationName ?? undefined,
     locationAddress: e.locationAddress ?? undefined,
     organizerName: e.organizerName ?? undefined,

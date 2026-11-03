@@ -23,6 +23,17 @@ import { withRetry } from "@/lib/retry";
  * Override with INGEST_GMAIL_FILTER to hand-curate, e.g. `label:Lumi` to read
  * only what a Gmail filter of your own has labelled.
  */
+/**
+ * When a message arrived, from its Date header, which the sender writes. A
+ * header in the future (spam, a wrong clock) is replaced with now: the next
+ * Gmail query starts from the newest receivedAt, so one message dated 2030
+ * would otherwise make every later query ask for mail after 2030.
+ */
+export function receivedAtFrom(header: Date | null | undefined, now: Date = new Date()): Date {
+  if (!header || Number.isNaN(header.getTime())) return now;
+  return header.getTime() > now.getTime() + 5 * 60 * 1000 ? now : header;
+}
+
 export const MAIL_FILTER =
   process.env.INGEST_GMAIL_FILTER?.trim() ||
   "in:inbox -category:promotions -category:social -category:updates -category:forums";
@@ -133,7 +144,7 @@ export async function parseRawMessage(
     gmailId: opts.gmailId ?? "",
     from: fromText,
     subject: parsed.subject ?? "",
-    receivedAt: parsed.date ?? new Date(),
+    receivedAt: receivedAtFrom(parsed.date),
     bodyText: parsed.text ?? "",
     bodyHtml: typeof parsed.html === "string" ? parsed.html : "",
     hasIcs: !!icsContent,

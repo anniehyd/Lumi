@@ -17,6 +17,7 @@ export type CalendarItem = {
   title: string;
   start: string; // ISO
   end: string; // ISO
+  allDay?: boolean;
   category: CalendarCategory;
   source: "google" | "lumi";
   location?: string;
@@ -80,6 +81,7 @@ export function mergeItems(google: CalendarItem[], lumiAccepted: MockEvent[]): C
     title: e.title,
     start: e.startTime,
     end: e.endTime ?? new Date(new Date(e.startTime).getTime() + 3600_000).toISOString(),
+    allDay: e.isAllDay === true,
     category: categorizeEvent(e),
     source: "lumi",
     location: e.locationName,

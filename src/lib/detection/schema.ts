@@ -44,7 +44,8 @@ export function parseSchemaOrg(html: string): ExtractedEvent[] {
         description: (n.description as string) ?? "",
         startTime: start,
         endTime: toIso(n.endDate) ?? undefined,
-        timezone: (n.timezone as string) ?? "UTC",
+        // schema.org has no zone property; an empty zone means the user's own.
+        timezone: typeof n.timezone === "string" ? n.timezone : "",
         locationName: (location?.name as string) ?? undefined,
         locationAddress:
           typeof location?.address === "string"

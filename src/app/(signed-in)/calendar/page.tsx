@@ -221,6 +221,7 @@ function timeOf(iso: string): string {
 }
 
 function timeSpan(i: CalendarItem): string {
+  if (i.allDay) return "All day";
   return `${timeOf(i.start)}–${timeOf(i.end)}`;
 }
 
@@ -402,7 +403,7 @@ function MonthGrid({ cursor, items }: { cursor: Date; items: CalendarItem[] }) {
                         item={it}
                         className={`block rounded-md px-2 py-1 text-[12px] leading-[1.3] transition-opacity hover:opacity-85 ${TONE[it.category].block}`}
                       >
-                        <span className="opacity-70 tabular-nums">{timeOf(it.start)}</span>{" "}
+                        <span className="opacity-70 tabular-nums">{it.allDay ? "All day" : timeOf(it.start)}</span>{" "}
                         <span className="font-semibold line-clamp-2">{it.title}</span>
                       </ItemLink>
                     </li>

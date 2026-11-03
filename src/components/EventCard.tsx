@@ -10,6 +10,7 @@ import { starNote } from "@/lib/stars";
 import { DEFAULT_PROFILE, type UserProfile } from "@/lib/profile";
 import type { SkipReason } from "@/components/EventFeed";
 
+import { allDayDate } from "@/lib/zonedTime";
 type Props = {
   event: MockEvent;
   index: number;
@@ -204,7 +205,7 @@ export function EventCard({ event, index, focused, profile = DEFAULT_PROFILE, on
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[15px]">
           <dt className="text-lumi-subtle">When</dt>
-          <dd className="font-semibold text-lumi-text tabular-nums">{dayLabel(event.startTime, event.endTime)}</dd>
+          <dd className="font-semibold text-lumi-text tabular-nums">{event.isAllDay ? `${allDayDate(event.startTime, event.timezone)} · All day` : dayLabel(event.startTime, event.endTime)}</dd>
           {event.locationName && (
             <>
               <dt className="text-lumi-subtle">Where</dt>

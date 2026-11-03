@@ -17,6 +17,9 @@ export type MockEvent = {
   startTime: string; // ISO
   endTime?: string;  // ISO
   timezone: string;
+  // A whole day rather than a time: startTime is midnight in `timezone` and
+  // the card says "All day".
+  isAllDay?: boolean;
   locationName?: string;
   locationAddress?: string;
   organizerName?: string;

@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { DEFAULT_TIMEZONE, addCalendarDays, localDate, parseInTimeZone, startOfLocalDate, validTimeZone } from "@/lib/zonedTime";
 import { prisma } from "@/lib/db";
 import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
 import { parseIcs } from "@/lib/detection/ics";
@@ -175,11 +176,14 @@ export async function processEmail(
   return { created, found: events.length, tier: "LLM", skip: null, llm };
 }
 
-/** A Date, or null for anything that does not parse — model output is untrusted. */
-function parseDate(value: string | undefined | null): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+/** The user's zone, for times that arrive with no offset and no zone of their own. */
+async function userTimeZone(userId: string): Promise<string> {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+    return validTimeZone(user?.timezone);
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
 }
 
 /**
@@ -199,6 +203,7 @@ export async function persistEvents(
   meta?: { extractedBy: string; promptVersion: string }
 ): Promise<number> {
   let inserted = 0;
+  const userZone = events.length ? await userTimeZone(userId) : DEFAULT_TIMEZONE;
   for (const e of events) {
     // Tier 0 — stable upstream id. A feed re-fetched every sweep hands back
     // the same UIDs, and those must never re-insert.
@@ -210,13 +215,27 @@ export async function persistEvents(
       if (seen) continue;
     }
 
-    const start = parseDate(e.startTime);
-    // Only future events are actionable — skip past or unparseable dates.
-    if (!start || !(start.getTime() > Date.now())) continue;
+    // Times without an offset are read in the event's zone, else the user's;
+    // the server's own zone (UTC) never decides what "6 PM" means.
+    const zone = validTimeZone(e.timezone || userZone);
+    const parsedStart = parseInTimeZone(e.startTime, zone);
+    if (!parsedStart) continue;
+    const start = parsedStart.at;
+    const allDay = e.isAllDay === true || parsedStart.dateOnly;
+    const day = localDate(start, zone);
     // An end that does not parse, or that precedes the start, is dropped
     // rather than allowed to fail the insert and take the email with it.
-    const parsedEnd = parseDate(e.endTime);
-    const end = parsedEnd && parsedEnd.getTime() > start.getTime() ? parsedEnd : null;
+    const parsedEnd = parseInTimeZone(e.endTime, zone)?.at ?? null;
+    const end =
+      parsedEnd && parsedEnd.getTime() > start.getTime()
+        ? parsedEnd
+        : allDay
+          ? startOfLocalDate(addCalendarDays(day, 1), zone)
+          : null;
+    // Only future events are actionable. A timed event must not have started;
+    // an all-day event stays until its day is over where it happens.
+    const stillAhead = allDay ? end!.getTime() > Date.now() : start.getTime() > Date.now();
+    if (!stillAhead) continue;
     // Survey/feedback deadlines are noise even when a tier extracts them.
     if (/survey|feedback/i.test(e.title)) continue;
 
@@ -262,16 +281,17 @@ export async function persistEvents(
         promptVersion: meta?.promptVersion ?? null,
         title: e.title,
         description: e.description,
-        date: start.toISOString().slice(0, 10),
+        date: day,
         startTime: start,
         endTime: end,
-        timezone: e.timezone,
+        timezone: zone,
+        isAllDay: allDay,
         locationName: e.locationName ?? null,
         locationAddress: e.locationAddress ?? null,
         organizerName: e.organizerName ?? null,
         organizerCompany: e.organizerCompany ?? null,
         rsvpLink: e.rsvpLink ?? null,
-        rsvpDeadline: parseDate(e.rsvpDeadline),
+        rsvpDeadline: parseInTimeZone(e.rsvpDeadline, zone)?.at ?? null,
         attire: e.attire ?? null,
         relevance: clampRelevance(e.relevance),
         relevanceReason: cleanReason(e.relevanceReason) ?? null,

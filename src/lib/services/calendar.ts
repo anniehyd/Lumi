@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { addCalendarDays, localDate } from "@/lib/zonedTime";
 import { prisma } from "@/lib/db";
 import { randomBytes } from "crypto";
 import { getGoogleAccessToken } from "@/lib/auth";
@@ -58,6 +59,27 @@ export function findConflict(
 ): string | null {
   const hit = busy.find((b) => b.start < end && b.end > start);
   return hit ? hit.title : null;
+}
+
+/**
+ * Google's start/end for an event. An all-day event goes in as dates (the end
+ * date is exclusive), so it shows as a whole day on the right date instead of
+ * a 24-hour block starting at midnight somewhere else.
+ */
+export function calendarTiming(
+  event: { isAllDay: boolean; date: string; endTime: Date | null; timezone: string },
+  start: Date,
+  end: Date
+) {
+  if (event.isAllDay) {
+    const last = event.endTime ? localDate(event.endTime, event.timezone) : "";
+    const endDate = last > event.date ? last : addCalendarDays(event.date, 1);
+    return { start: { date: event.date }, end: { date: endDate } };
+  }
+  return {
+    start: { dateTime: start.toISOString(), timeZone: event.timezone },
+    end: { dateTime: end.toISOString(), timeZone: event.timezone },
+  };
 }
 
 /**
@@ -135,14 +157,7 @@ export async function syncEventToCalendar(
             summary: event.title,
             description,
             location: location || undefined,
-            start: {
-              dateTime: start.toISOString(),
-              timeZone: event.timezone,
-            },
-            end: {
-              dateTime: end.toISOString(),
-              timeZone: event.timezone,
-            },
+            ...calendarTiming(event, start, end),
             reminders: {
               useDefault: false,
               overrides: [

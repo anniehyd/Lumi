@@ -30,6 +30,7 @@ import {
   newCalendarEventId,
   syncEventToCalendar,
   unsyncEvent,
+  calendarTiming,
 } from "@/lib/services/calendar";
 
 const stored = (over: Record<string, unknown> = {}) => ({
@@ -201,5 +202,28 @@ describe("newCalendarEventId", () => {
     const a = newCalendarEventId();
     expect(a).toMatch(/^[a-v0-9]{5,1024}$/);
     expect(newCalendarEventId()).not.toBe(a);
+  });
+});
+
+describe("calendarTiming", () => {
+  const start = new Date("2026-11-05T05:00:00Z");
+  const end = new Date("2026-11-06T05:00:00Z");
+
+  it("writes an all-day event as dates with an exclusive end", () => {
+    expect(calendarTiming({ isAllDay: true, date: "2026-11-05", endTime: end, timezone: "America/New_York" }, start, end)).toEqual({
+      start: { date: "2026-11-05" },
+      end: { date: "2026-11-06" },
+    });
+  });
+
+  it("still gives an all-day event with no end a single day", () => {
+    expect(calendarTiming({ isAllDay: true, date: "2026-11-05", endTime: null, timezone: "America/New_York" }, start, end).end).toEqual({ date: "2026-11-06" });
+  });
+
+  it("writes a timed event as times in its zone", () => {
+    expect(calendarTiming({ isAllDay: false, date: "2026-11-05", endTime: end, timezone: "America/New_York" }, start, end)).toEqual({
+      start: { dateTime: start.toISOString(), timeZone: "America/New_York" },
+      end: { dateTime: end.toISOString(), timeZone: "America/New_York" },
+    });
   });
 });

@@ -31,8 +31,10 @@ const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
 // Incremental query: only list mail newer than what we've already ingested
 // (1h overlap; messageId dedup absorbs it). First run backfills the window.
 async function queryFor(userId: string): Promise<string> {
+  // receivedAt is clamped on the way in, but rows stored before that fix can
+  // still sit in the future, so they never set the floor.
   const latest = await prisma.email.findFirst({
-    where: { userId },
+    where: { userId, receivedAt: { lte: new Date() } },
     orderBy: { receivedAt: "desc" },
     select: { receivedAt: true },
   });
@@ -42,23 +44,26 @@ async function queryFor(userId: string): Promise<string> {
   return `after:${Math.floor(after / 1000)} ${MAIL_FILTER}`;
 }
 
-// Keep only the window: drop old emails, past events, and decided events
-// once they age out. Decided events vanish from the UI immediately; this
-// just stops the DB from growing.
+// Keep only the window: drop old emails and events that are over. A decided
+// event is kept until it has happened, whenever it was decided: an accepted
+// event is still on the user's iCal feed, and a deleted one would come back
+// as a fresh card on the next Handshake sweep.
 async function purge() {
   const cutoff = new Date(Date.now() - WINDOW_MS);
   const events = await prisma.event.deleteMany({
     where: {
       OR: [
-        { status: { in: ["ACCEPTED", "DECLINED"] }, updatedAt: { lt: cutoff } },
         { startTime: { lt: cutoff } },
-        // An undecided event that has already started can no longer be attended.
-        { status: { in: ["PENDING", "MAYBE"] }, startTime: { lt: new Date() } },
+        // An undecided event that has already started can no longer be
+        // attended; an all-day one only once its day is over.
+        { status: { in: ["PENDING", "MAYBE"] }, isAllDay: false, startTime: { lt: new Date() } },
+        { status: { in: ["PENDING", "MAYBE"] }, isAllDay: true, endTime: { lt: new Date() } },
       ],
     },
   });
   const emails = await prisma.email.deleteMany({
-    where: { receivedAt: { lt: cutoff } },
+    // createdAt catches mail whose Date header claimed a future date.
+    where: { OR: [{ receivedAt: { lt: cutoff } }, { createdAt: { lt: cutoff } }] },
   });
   await prisma.llmUsage.deleteMany({ where: { createdAt: { lt: cutoff } } });
   if (events.count || emails.count)
