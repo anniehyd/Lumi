@@ -16,8 +16,9 @@ picks the slots everyone shares and puts the winner on your calendar.
 ![Lumi dashboard — "Looks like it's gonna be a busy week", with the extracted events ranked below](docs/demo.png)
 
 **Try it.** [lumi-demo.fly.dev](https://lumi-demo.fly.dev) is the whole product
-on a sample inbox, with no sign-in. The sample cards are not real mail and
-nothing you do there persists. [docs/lumi-demo.html](docs/lumi-demo.html) is the
+on a sample inbox, with no sign-in. The samples are based on one real week of
+a student's newsletters, with personal details removed, and nothing you do there
+persists. [docs/lumi-demo.html](docs/lumi-demo.html) is the
 same idea as a single file you can open in any browser.
 
 **Status (November 2026).** Lumi is a working product looking for its first
