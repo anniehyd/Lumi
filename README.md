@@ -87,30 +87,23 @@ it wrong, then **Attend & add to calendar**.
 
 <br>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-
 ### Your week at a glance
 
-<img src="docs/screenshots/calendar.png" alt="The Calendar page: the coming days with classes, a coffee chat and two events accepted in Lumi">
+<img src="docs/screenshots/calendar.png" alt="The Calendar page: the coming days with classes, a coffee chat and two events accepted in Lumi" width="880">
 
 Your own Google Calendar and the events you accepted in Lumi, in one list.
 Undecided events stay on Today until you choose.
 
-</td>
-<td width="50%" valign="top">
+<br>
 
 ### Find a time together
 
-<img src="docs/screenshots/find-a-time.png" alt="A group poll: your free time on the left, everyone's overlapping availability on the right">
+<img src="docs/screenshots/find-a-time.png" alt="A group poll: your free time on the left, everyone's overlapping availability on the right" width="880">
 
 Share a poll link. Friends mark when they are free without making an
 account, and Lumi ranks the times that work for everyone.
 
-</td>
-</tr>
-</table>
+<br>
 
 ### Three ways to bring mail in
 
@@ -153,12 +146,13 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 ## Privacy
 
-| | |
-|---|---|
-| ✋ **You decide every time** | Lumi never adds, accepts or declines anything on its own. |
-| 🔑 **Minimal access** | Sign-in asks for your name and email only. Inbox and calendar access are optional, and forwarding works without either. |
-| 📥 **Limited reading** | Only your primary inbox, and only mail newer than the last check. |
-| 🗑️ **Short retention** | Email content is deleted after 14 days. |
+- ✋ **You decide every time.** Lumi never adds, accepts or declines anything
+  on its own.
+- 🔑 **Minimal access.** Sign-in asks for your name and email only. Inbox and
+  calendar access are optional, and forwarding works without either.
+- 📥 **Limited reading.** Only your primary inbox, and only mail newer than
+  the last check.
+- 🗑️ **Short retention.** Email content is deleted after 14 days.
 
 ## Built with
 
