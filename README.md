@@ -81,55 +81,20 @@ Handshake source in [docs/handshake.md](docs/handshake.md).
   last check.
 - **Short retention.** Email content is deleted after 14 days.
 
-## Running it
+## Try it
 
-### Demo mode, nothing to configure
+**[lumi-demo.fly.dev](https://lumi-demo.fly.dev)** opens Lumi on a sample
+inbox. There is nothing to install and no account to create. Choose an event,
+answer *attending?*, and see where it goes. A sample group poll is at
+[/meet/demo-study-group](https://lumi-demo.fly.dev/meet/demo-study-group).
+Nothing you do in the demo is saved.
 
-```bash
-git clone https://github.com/anniehyd/Lumi.git
-cd Lumi
-npm install
-npm run dev
-```
+## For developers
 
-Open [http://localhost:3000](http://localhost:3000) and choose **Try the
-demo**. The dashboard fills with a sample inbox, a sample poll lives at
-`/meet/demo-study-group`, and nothing is written anywhere.
+Setup, the three run modes, tests and the evaluation scripts are in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-Demo mode is on whenever `GOOGLE_CLIENT_ID` is unset. If your `.env` already
-has Google credentials, the app starts in live mode instead, and the dashboard
-asks you to sign in. To see the demo anyway, start it with the variable
-cleared:
-
-```bash
-GOOGLE_CLIENT_ID= DATABASE_URL= npm run dev
-```
-
-### Modes
-
-| Mode | Database | Google OAuth | Model key | What works |
-|---|---|---|---|---|
-| **Demo** | — | — | — | Full UI on sample data (the default) |
-| **Persisted** | ✓ | — | — | Real database; forwarding address and polls persist |
-| **Live** | ✓ | ✓ | ✓ | Gmail sweeps, extraction, Google Calendar sync |
-
-### Persisted and live
-
-```bash
-cp .env.example .env        # fill in what the mode needs; see the table below
-docker compose up -d        # Postgres on 5432 (Redis only matters with INGEST_MODE=queue)
-npx prisma db push
-npm run db:seed             # optional: the newsletter sample into the database
-npm run dev
-```
-
-Sweeps in live mode: either `npm run worker` (a timer at the times in
-`INGEST_SWEEP_TIMES`, no Redis) or any external scheduler calling
-`POST /api/cron/sweep` with the bearer `CRON_SECRET`. The GitHub Actions
-workflow in `.github/workflows/sweep.yml` does the latter once the
-`LUMI_URL` and `CRON_SECRET` secrets exist.
-
-### Deploying
+## Deploying
 
 Lumi runs as a single web service plus Postgres. Inbox checks are triggered
 by any scheduler calling `POST /api/cron/sweep` with the `CRON_SECRET`
@@ -143,15 +108,6 @@ machine can stop when idle.
 - **Single server with Docker.** See [DEPLOY.md](DEPLOY.md), which also covers
   the Google OAuth setup every deployment needs.
 
-### Tests
-
-```bash
-npm run typecheck
-npm run lint
-npm run test:run        # 350+ tests on mocks and fixtures; any network call throws
-npm run eval:prefilter  # replay eval/golden through the pre-filter
-```
-
 ## Environment variables
 
 All keys live in `.env.example`.
@@ -159,7 +115,7 @@ All keys live in `.env.example`.
 | Variable | Needed for | Notes |
 |---|---|---|
 | `DATABASE_URL` | Persisted, live | Defaults to the Docker Compose Postgres |
-| `NEXTAUTH_URL`, `NEXTAUTH_SECRET` | Auth | `http://localhost:3000` locally; `openssl rand -base64 32` |
+| `NEXTAUTH_URL`, `NEXTAUTH_SECRET` | Auth | The app's public address; `openssl rand -base64 32` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Live | OAuth app published to production; sign-in uses non-sensitive scopes, Gmail read-only and Calendar events are requested on connect |
 | `ANTHROPIC_API_KEY` | Extraction | Or `LLM_API_KEY` + `LLM_BASE_URL` for Qwen and any OpenAI-compatible endpoint |
 | `LLM_MODEL` | Extraction | Default `claude-haiku-4-5`; `claude*` routes to Anthropic, anything else to the compatible endpoint |
