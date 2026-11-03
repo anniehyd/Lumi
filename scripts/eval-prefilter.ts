@@ -44,7 +44,7 @@ const cases = (JSON.parse(readFileSync(path, "utf8")) as Case[]).sort((a, b) =>
 );
 
 // Rough chars→tokens conversion, used only to turn the compaction ratio into
-// a dollar estimate in docs/COST.md. Real counts come from LlmUsage.
+// a dollar estimate. Real counts come from LlmUsage.
 const CHARS_PER_TOKEN = 4;
 
 const seenHashes = new Set<string>();

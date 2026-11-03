@@ -14,7 +14,7 @@
  *
  * Inline is the default because the queue was the single largest line on the
  * hosting bill: an idle BullMQ consumer polls Redis around the clock, and a
- * pay-per-command Redis charges for every poll. See docs/COST.md.
+ * pay-per-command Redis charges for every poll. See docs/ARCHITECTURE.md.
  */
 import { Sentry } from "@/lib/services/instrument";
 import { MAIL_FILTER } from "@/lib/services/gmail";
@@ -183,7 +183,7 @@ async function sweep() {
 }
 
 // The pool sits idle between sweeps and Fly's proxy drops the idle TCP
-// connection to lumi-live-db.flycast; Postgres itself isn't reaping (no
+// connection to the database; Postgres itself isn't reaping (no
 // idle_session_timeout). Prisma usually reconnects transparently, but when it
 // doesn't the whole sweep dies with P1001 and that run's mail is never scanned.
 // Force a round-trip first so a dead socket surfaces here, where we can retry.

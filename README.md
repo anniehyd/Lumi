@@ -1,72 +1,55 @@
 # Lumi
 
-**Every invite, sorted.** Lumi reads the newsletters and announcements in a
-student's inbox, pulls out the events, ranks them by how well they fit you,
-and asks one question per event: attending? Yes goes straight to Google
+**Every invite, sorted.** Lumi reads the newsletters and announcements in your
+inbox, finds the events buried inside them, ranks them by how well they fit
+you, and asks one question per event: *attending?* Yes puts it on your Google
 Calendar. Nothing lands there until you say so.
-
-It also answers the question that follows every event: *when can all of us
-make it?* A Lumi poll is a link your group paints their free time on; Lumi
-picks the slots everyone shares and puts the winner on your calendar.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 
-![Lumi dashboard — "Looks like it's gonna be a busy week", with the extracted events ranked below](docs/demo.png)
+![Lumi's Today view: a one-line summary of the week, then the events waiting for a decision, most relevant first](docs/demo.png)
 
-**Try it.** [lumi-demo.fly.dev](https://lumi-demo.fly.dev) is the whole product
-on a sample inbox, with no sign-in. The samples are based on one real week of
-a student's newsletters, with personal details removed, and nothing you do there
-persists. [docs/lumi-demo.html](docs/lumi-demo.html) is the
-same idea as a single file you can open in any browser.
+**[Try the live demo →](https://lumi-demo.fly.dev)** No sign-in needed. The
+demo runs on a sample inbox, and nothing you do there is saved.
 
-**Status (November 2026).** Lumi is a working product looking for its first
-users, not a launched one. It ran on its founder's own inbox, was paused in
-October over a hosting bill, and has been rebuilt to run on one small machine
-that stops when idle. The new deployment is at
-[lumi-live.fly.dev](https://lumi-live.fly.dev). No outside user has connected an
-inbox yet. Accuracy has not been measured against hand-labeled mail, and the
-per-user cost in [docs/COST.md](docs/COST.md) is an estimate, not a measurement.
-Forward-to-Lumi is built but needs a mail provider on the hosted instance, and
-connecting Gmail shows Google's unverified-app warning until the app is verified.
+## Why Lumi
 
-## What it does
+Students and early-career professionals get a steady stream of event mail:
+info sessions, coffee chats, application deadlines, club meetings, talks.
+Most of it arrives inside long newsletters and digests, a few useful lines in
+a wall of text. The result is either hours spent reading and copying dates by
+hand, or missed opportunities.
 
-**Today.** One sentence about the week ("Looks like it's gonna be a busy
-week"), then the events still waiting for a decision, most relevant first.
-Each card leads with a plain sentence about where it came from and who it is
-for, then the title, time, place, and the paragraph of the email Lumi found
-it in. Attend, Maybe or Skip; `J` `K` `A` `M` `D` on the keyboard.
+Email clients already recognize flights and restaurant bookings. They do not
+read a club digest, pull out the ten events in it, and tell you which two are
+worth your evening. Lumi does exactly that, and leaves the decision with you.
 
-**Calendar.** A schedule of the coming weeks with full titles, places and
-status, plus month and week grids. Solid ink means on Google Calendar, an
-outline means still undecided.
+## Features
 
-**Find a time with others.** Make a poll, share the link. Nobody else needs
-an account: they press and drag over the slots they are free for, and the
-page shows a heatmap, the best stretches ranked by how many people share
-them, and who is missing from each. The organizer picks one; it becomes an
-accepted event and syncs to their calendar.
+**Today.** A one-line read on your week, then every event still waiting for a
+decision, most relevant first. Each card says where it came from and why it
+was ranked where it is, with the paragraph of the email it was found in.
+Attend, Maybe or Skip, with keyboard shortcuts for all three.
 
-**Signing in.** Google sign-in, asking for name and email only. That is all
-anyone needs to get a forwarding address, a Handshake feed and an iCal
-subscription, which is why the OAuth app can be published without Google's
-review and without a test-user list. Gmail and Google Calendar are a
-separate grant the user gives from onboarding or Settings.
+**Calendar.** The coming weeks at a glance, with what is confirmed on your
+Google Calendar and what is still undecided.
 
-**Three ways in.**
+**Find a time together.** Share a poll link; friends mark when they are free
+without creating an account. Lumi ranks the slots everyone shares, and the
+time you pick goes on your calendar.
 
-| Source | How | Needs |
+**Three ways to bring mail in.**
+
+| Source | How it works | Permission needed |
 |---|---|---|
-| Gmail | Lumi sweeps the inbox tab twice a day (1 PM and 7 PM New York), only mail newer than the last sweep, never Promotions, Social, archived or sent mail | An optional Gmail + Calendar grant after sign-in |
-| Forward to Lumi | A private `lumi+<token>@` address; forward a newsletter, or set a Gmail filter to forward automatically | Nothing. No Google permission at all |
-| Handshake | Your personal calendar export link, pulled on every sweep | The link from Handshake → Settings → Calendar export |
+| Gmail | Lumi checks your inbox twice a day for new mail. Promotions, Social, archived and sent mail are never read. | Optional Gmail and Calendar access, granted separately after sign-in |
+| Forward to Lumi | A private forwarding address. Forward a newsletter, or set a filter to forward them automatically. | None |
+| Handshake | Your personal Handshake calendar link, refreshed on every check | None |
 
-**Settings.** Every control does something: the connected inbox and a Scan
-now button, your forwarding address, Handshake, the interest profile Lumi
-ranks against, your pipeline numbers for the week, and a private iCal
-subscription link for Apple Calendar.
+**Apple Calendar and others.** A private iCal subscription link for every
+event you accept.
 
 ## How it works
 
@@ -74,23 +57,29 @@ subscription link for Apple Calendar.
 Email → Detection → Extraction + relevance → Conflict check → Card → You decide → Calendar
 ```
 
-1. **Ingestion.** Gmail, the forwarding address, and the Handshake feed all
-   land in the same pipeline.
-2. **Detection.** Free and exact first: a calendar attachment, then schema.org
-   markup. Then a keyword gate and a rule-based pre-filter (surveys, mail with
-   no date or time, duplicates, replies that add nothing, bulk senders with
-   no track record) before any model call. In a two-week sample of 405
-   emails, 34 reached the model.
-3. **Extraction.** One forced-tool call per email: every event in it, a
-   1–5 relevance score against your profile, and the "Looks like…" sentence.
-4. **Guards.** Past events dropped, the same event from two senders deduped,
-   overlaps with your Google Calendar flagged (never decided for you).
-5. **Decision.** Attend writes to Google Calendar. Walking it back removes it.
+1. **Ingestion.** Gmail, forwarded mail and the Handshake feed enter one pipeline.
+2. **Detection.** Exact signals first: calendar attachments and structured
+   event markup. A keyword gate and rule-based filters then drop surveys,
+   receipts, duplicates and mail with no date before any AI model is called.
+3. **Extraction.** One model call per remaining email finds every event in it
+   and scores each one from 1 to 5 against your interest profile.
+4. **Guards.** Past events are dropped, the same event from two senders is
+   merged, and overlaps with your calendar are flagged.
+5. **Decision.** Attend writes the event to Google Calendar. Changing your
+   mind removes it.
 
-The stage-by-stage file map, data model and failure handling are in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Cost is in
-[docs/COST.md](docs/COST.md), the metrics in [docs/METRICS.md](docs/METRICS.md),
-Handshake in [docs/handshake.md](docs/handshake.md).
+Details are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the
+Handshake source in [docs/handshake.md](docs/handshake.md).
+
+## Privacy
+
+- **You decide every time.** Lumi never adds, accepts or declines anything on
+  its own.
+- **Minimal access.** Sign-in asks for your name and email only. Inbox and
+  calendar access are optional, and forwarding works without either.
+- **Limited reading.** Only your primary inbox, and only mail newer than the
+  last check.
+- **Short retention.** Email content is deleted after 14 days.
 
 ## Running it
 
@@ -103,9 +92,18 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The inbox fills from a
-real NYU Wasserman newsletter, the sample poll lives at
+Open [http://localhost:3000](http://localhost:3000) and choose **Try the
+demo**. The dashboard fills with a sample inbox, a sample poll lives at
 `/meet/demo-study-group`, and nothing is written anywhere.
+
+Demo mode is on whenever `GOOGLE_CLIENT_ID` is unset. If your `.env` already
+has Google credentials, the app starts in live mode instead, and the dashboard
+asks you to sign in. To see the demo anyway, start it with the variable
+cleared:
+
+```bash
+GOOGLE_CLIENT_ID= DATABASE_URL= npm run dev
+```
 
 ### Modes
 
@@ -133,13 +131,17 @@ workflow in `.github/workflows/sweep.yml` does the latter once the
 
 ### Deploying
 
-Two Fly.io apps, each with its own config. `fly.live.toml` is the real app:
-Google sign-in, Postgres, sweeps triggered by `POST /api/cron/sweep`, and a
-machine that stops when idle. Pages that need a session send signed-out
-visitors back to the landing page. `fly.demo.toml` has no database and no OAuth,
-so it serves only the sample inbox; real mail never goes on it, because it has
-no sign-in. [DEPLOY.md](DEPLOY.md) covers the older single-box setup and the
-Google OAuth steps both need.
+Lumi runs as a single web service plus Postgres. Inbox checks are triggered
+by any scheduler calling `POST /api/cron/sweep` with the `CRON_SECRET`
+bearer token, so no background worker or queue is required, and the web
+machine can stop when idle.
+
+- **Fly.io.** `fly.live.toml` is a production config (Google sign-in,
+  Postgres, scheduled checks). `fly.demo.toml` serves the sample inbox with no
+  database and no sign-in. Never point a demo deployment at real mail: it has
+  no sign-in, so anything in its database is public.
+- **Single server with Docker.** See [DEPLOY.md](DEPLOY.md), which also covers
+  the Google OAuth setup every deployment needs.
 
 ### Tests
 

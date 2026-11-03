@@ -16,7 +16,9 @@ path: no LLM tokens, confidence 1.0.
 2. **Calendar export** → **Copy calendar link** (a `webcal://` URL — that's fine,
    Lumi upgrades it to `https://`)
 3. Either:
-   - **Single-user deploys** (`lumi-live`): set `HANDSHAKE_ICS_URL` in the env
+   - **Single-user self-hosted deploys only**: set `HANDSHAKE_ICS_URL` in the env.
+     Never set it on a deployment with more than one user: every user without
+     their own link would receive that feed.
    - **Per user**: `PUT /api/sources/handshake` with `{"feedUrl": "webcal://..."}`
 
 The `PUT` fetches the feed once before storing it, so a bad paste fails

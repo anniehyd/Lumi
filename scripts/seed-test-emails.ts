@@ -9,13 +9,15 @@ import { mockEmails, mockEvents } from "../src/lib/mock/events";
 
 const prisma = new PrismaClient();
 
+const SEED_EMAIL = process.env.SEED_USER_EMAIL || "student@example.edu";
+
 async function main() {
   const user = await prisma.user.upsert({
-    where: { email: "yh5536@nyu.edu" },
+    where: { email: SEED_EMAIL },
     update: {},
     create: {
-      email: "yh5536@nyu.edu",
-      name: "Annie Hang",
+      email: SEED_EMAIL,
+      name: "Demo Student",
       timezone: "America/New_York",
     },
   });

@@ -7,7 +7,7 @@ terminating HTTPS for a DuckDNS domain.
 ## One-time setup
 
 1. **AWS credentials** (own account, kept separate from the default profile):
-   `aws configure --profile annie`
+   `aws configure --profile <your-profile>`
 
 2. **DuckDNS**: claim a subdomain at https://www.duckdns.org (login with
    Google/GitHub). After provisioning, point it at the Elastic IP printed by
@@ -47,7 +47,7 @@ terminating HTTPS for a DuckDNS domain.
 ## Provision + deploy
 
 ```bash
-AWS_PROFILE=annie ./deploy/provision.sh          # prints Elastic IP
+AWS_PROFILE=<your-profile> ./deploy/provision.sh          # prints Elastic IP
 # point DuckDNS at that IP, then:
 ./deploy/sync.sh <elastic-ip> <sub>.duckdns.org
 ```
@@ -66,8 +66,8 @@ docker compose -f ~/lumi/docker-compose.prod.yml ps
 
 Cost: ~$17/mo (t3.small + 30GB gp3 + Elastic IP attached to a running box).
 
-This single-box layout is the expensive way to run Lumi. A web-only instance
-with externally triggered sweeps is estimated at under $3/mo — see
-[docs/COST.md](docs/COST.md). On this box the worker runs in inline mode and
+This single-box layout keeps a server running around the clock. A web-only
+instance that stops when idle, with checks triggered by an external
+scheduler, costs less to run (see the README). On this box the worker runs in inline mode and
 the `redis` service in `docker-compose.prod.yml` is unused unless you set
 `INGEST_MODE=queue`.

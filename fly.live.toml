@@ -4,7 +4,7 @@ primary_region = "ewr"
 # Web-only: one machine that stops when idle. Sweeps are triggered from outside
 # by POST /api/cron/sweep (.github/workflows/sweep.yml), which wakes the
 # machine, runs the whole ingest inline, and lets it stop again. There is no
-# worker process and no Redis — see docs/COST.md for why.
+# worker process and no Redis — see docs/ARCHITECTURE.md for why.
 #
 # To run sweeps from an always-on timer instead, add a second process:
 #   [processes]

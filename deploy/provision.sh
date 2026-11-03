@@ -2,7 +2,7 @@
 # Provision a single EC2 box for Lumi: security group, key pair, t3.small
 # (Ubuntu 24.04) with Docker preinstalled via user-data, and an Elastic IP.
 #
-# Usage: AWS_PROFILE=annie ./deploy/provision.sh [region]
+# Usage: AWS_PROFILE=<your-profile> ./deploy/provision.sh [region]
 set -euo pipefail
 
 REGION="${1:-us-east-1}"

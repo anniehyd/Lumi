@@ -75,7 +75,7 @@ flowchart TD
 | UI data | `src/lib/dataSource.ts`, `src/lib/apiAuth.ts` | Every query is scoped to the signed-in user; mocks only in demo mode. |
 | Metrics | `src/lib/metrics.ts`, `src/app/api/metrics/route.ts` | See [METRICS.md](METRICS.md). |
 
-## The four tiers, honestly
+## The four tiers
 
 The tiers are ordered by cost and certainty, and each one runs only if the one
 before found nothing.
@@ -83,15 +83,13 @@ before found nothing.
 1. **ICS** and 2. **schema.org** are exact parsers. They cost nothing and never
    guess.
 3. **The keyword gate is a gate, not an extractor.** It answers "could this
-   email contain an event?" and nothing else. Since tonight it is followed by
-   the rule-based pre-filter (below).
+   email contain an event?" and nothing else. It is followed by the rule-based
+   pre-filter (below).
 4. **The model** does all the real extraction for ordinary mail.
 
-In the one real sample in the repo (405 emails over 14 days, `eval/golden/`),
-12 of 13 events came from tier 4, 1 from tier 1 and 0 from tier 2. So the
-tiering is sound engineering, but today the model carries almost all of the
-recall. That is worth saying plainly in an interview rather than implying the
-parsers do most of the work.
+In practice almost all events come from ordinary newsletters, so the model
+carries most of the recall; the exact tiers matter for calendar invitations
+and for keeping cost down.
 
 ### Before any tier: things the user already handled
 
@@ -209,8 +207,8 @@ Two modes, chosen by `INGEST_MODE`:
   database, and an external scheduler calling `POST /api/cron/sweep`. No Redis,
   no worker.
 - **`queue`.** The sweep enqueues a BullMQ job per user; `npm run worker`
-  consumes them. Needs Redis. This is how production ran until October, and
-  what made it expensive ([COST.md](COST.md)).
+  consumes them. Needs Redis, and keeps a worker running at all times, so it
+  costs more to host than inline mode.
 
 `npm run worker` still works in inline mode: it is then just a timer that calls
 the same sweep, useful for the single-box Docker deployment in `DEPLOY.md`.

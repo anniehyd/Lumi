@@ -54,7 +54,7 @@ export function costUsd(model: string, usage: Usage): number | null {
 
 /**
  * One line per extraction call. Grep-friendly on purpose:
- *   fly logs -a lumi-live | grep llm.usage
+ *   fly logs -a <app> | grep llm.usage
  */
 export function logUsage(args: {
   provider: string;

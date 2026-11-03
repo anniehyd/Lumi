@@ -1,12 +1,7 @@
 # Lumi metrics
 
-**There is no data yet.** The tracking below was added on the
-`overnight-improvements` branch and has never run against a real inbox: the
-production database was shut down on Oct 2 and the only historical data is a
-14-day email sample with no accept or decline decisions in it. Every number
-this document describes will read "no data" until the first sweep runs on this
-build. Do not quote figures from here; quote what `npm run metrics` prints
-after a week of use.
+What Lumi counts, where the counts live, and how the derived figures are
+calculated.
 
 ## Where the numbers live
 
@@ -72,7 +67,7 @@ minutes_saved_per_week =
 In words: time you would have spent typing accepted events into a calendar,
 minus time you spent reviewing every card Lumi showed you, scaled to a week.
 
-**`M` and `R` are my guesses, not measurements.** Before using this number
+**`M` and `R` are defaults, not measurements.** Before using this number
 anywhere that matters, time yourself creating five calendar entries from real
 emails and reviewing ten cards, and set the two env vars. State them whenever
 you state the result: "about N minutes a week, assuming 2 minutes per manual
@@ -95,28 +90,9 @@ none, it cost you time.
 
 - **Recall.** Accept and decline measure whether what Lumi showed was good.
   Nothing here measures what it never showed. The only recall signal is the
-  "Lumi missed something" button (`Miss` table); the pre-filter added tonight
-  makes that button more important, not less.
+  "Lumi missed something" button (`Miss` table); the pre-filter makes that button more
+  important, not less.
 - **Whether a relevance score was right.** The score is recorded per event;
   `npm run metrics` prints the distribution of scores, and accept rate by
   star level can be queried from `Event`, but neither is computed for you yet.
 - **Anything before this build.** There is no backfill.
-
-## Interview-safe statements
-
-True today, from code and the offline replay, with the caveats attached:
-
-- "On a 14-day sample of 405 real emails, rule-based filtering cut model calls
-  from 52 to 34 without losing any of the 12 events the old pipeline found."
-  (Labels are the old pipeline's output, not hand-labelled truth.)
-- "Replacing tracking links with placeholders cut the text sent to the model by
-  about 80% on that sample." (Not yet validated for accuracy against a live
-  model.)
-- "87% of model calls were returning nothing, which is what told me where to
-  filter."
-- "Hosting went from $24.49 a month to an estimated under $3, mostly by
-  removing a queue that was billing per poll." (After-figure is an estimate
-  from list prices.)
-
-Not yet true, so do not say them: any accept rate, any time-saved figure, any
-per-user cost measured in production.

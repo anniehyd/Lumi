@@ -190,8 +190,8 @@ export function Landing({ demoBase = "" }: { demoBase?: string }) {
             ))}
           </ol>
           <p className="text-sm text-lumi-muted max-w-[64ch]">
-            In a two-week sample of 405 real NYU emails, 34 reached the model. The
-            rest were handled by rules that cost nothing.
+            Most mail never reaches the model at all. Rules that cost nothing
+            handle it first.
           </p>
         </section>
 

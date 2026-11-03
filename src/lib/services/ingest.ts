@@ -267,7 +267,8 @@ export async function retryUnprocessed(
 
 /**
  * Resolve the Handshake feed for a user: their stored URL, else the
- * HANDSHAKE_ICS_URL env fallback (single-user deploys like lumi-live).
+ * HANDSHAKE_ICS_URL env fallback. Single-user self-hosted deploys only: on a
+ * multi-user deployment every user without a link would get this feed.
  */
 async function handshakeFeedFor(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
