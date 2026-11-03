@@ -15,11 +15,20 @@ picks the slots everyone shares and puts the winner on your calendar.
 
 ![Lumi dashboard — "Looks like it's gonna be a busy week", with the extracted events ranked below](docs/demo.png)
 
-**Status (October 2026).** The hosted instance was switched off on October 2
-for cost and has not been redeployed. Everything runs locally: demo mode
-needs no credentials (`npm install && npm run dev`), and
-[docs/lumi-demo.html](docs/lumi-demo.html) is a single file you can open in
-any browser.
+**Try it.** [lumi-demo.fly.dev](https://lumi-demo.fly.dev) is the whole product
+on a sample inbox, with no sign-in. The sample cards are not real mail and
+nothing you do there persists. [docs/lumi-demo.html](docs/lumi-demo.html) is the
+same idea as a single file you can open in any browser.
+
+**Status (November 2026).** Lumi is a working product looking for its first
+users, not a launched one. It ran on its founder's own inbox, was paused in
+October over a hosting bill, and has been rebuilt to run on one small machine
+that stops when idle. The new deployment is at
+[lumi-live.fly.dev](https://lumi-live.fly.dev). No outside user has connected an
+inbox yet. Accuracy has not been measured against hand-labeled mail, and the
+per-user cost in [docs/COST.md](docs/COST.md) is an estimate, not a measurement.
+Forward-to-Lumi is built but needs a mail provider on the hosted instance, and
+connecting Gmail shows Google's unverified-app warning until the app is verified.
 
 ## What it does
 
@@ -121,12 +130,22 @@ Sweeps in live mode: either `npm run worker` (a timer at the times in
 workflow in `.github/workflows/sweep.yml` does the latter once the
 `LUMI_URL` and `CRON_SECRET` secrets exist.
 
+### Deploying
+
+Two Fly.io apps, each with its own config. `fly.live.toml` is the real app:
+Google sign-in, Postgres, sweeps triggered by `POST /api/cron/sweep`, and a
+machine that stops when idle. Pages that need a session send signed-out
+visitors back to the landing page. `fly.demo.toml` has no database and no OAuth,
+so it serves only the sample inbox; real mail never goes on it, because it has
+no sign-in. [DEPLOY.md](DEPLOY.md) covers the older single-box setup and the
+Google OAuth steps both need.
+
 ### Tests
 
 ```bash
 npm run typecheck
 npm run lint
-npm run test:run        # ~300 tests on mocks and fixtures; any network call throws
+npm run test:run        # 350+ tests on mocks and fixtures; any network call throws
 npm run eval:prefilter  # replay eval/golden through the pre-filter
 ```
 
@@ -154,6 +173,7 @@ All keys live in `.env.example`.
 | `CALENDAR_FEED_TOKEN`, `CALENDAR_FEED_EMAIL` | Legacy feed | Only for subscriptions made before per-user feed links |
 | `LUMI_DEMO_USER_EMAIL` | Demo | Which account demo mode shows when the database has several |
 | `LUMI_USE_MOCK_FALLBACK` | Demo | `true` (default) serves sample data when there is no database |
+| `LUMI_DEMO_URL` | Landing page | Origin of a separate demo deployment; the demo links go there. Unset keeps them on this host |
 
 ## API
 
@@ -185,9 +205,10 @@ All keys live in `.env.example`.
 
 ```
 prisma/schema.prisma      database schema
-src/app/                  pages: dashboard, calendar, events, meet, onboarding, settings
+src/app/                  landing page and public poll pages
+src/app/(signed-in)/      dashboard, calendar, events, onboarding, settings, behind the session check
 src/app/api/              routes listed above
-src/components/           EventFeed, EventCard, MeetGrid, StarCursor, Nav, ProfileEditor, MetricsCard
+src/components/           Landing, EventFeed, EventCard, MeetGrid, StarCursor, Nav, ProfileEditor, MetricsCard
 src/lib/brief.ts          the "Looks like…" headline and per-event fallback sentence
 src/lib/meet.ts           poll grid, slot keys, best-time ranking
 src/lib/meetStore.ts      Prisma or in-memory poll storage
