@@ -77,3 +77,15 @@ export function allDayDate(startISO: string, timeZone: string | null | undefined
 export function startOfLocalDate(date: string, timeZone: string | null | undefined): Date {
   return fromZonedTime(`${date}T00:00:00`, validTimeZone(timeZone));
 }
+
+/** A wall-clock time on a calendar date in a zone: 2 PM on "2026-11-05" in New York. */
+export function atLocalTime(date: string, hour: number, minute: number, timeZone: string | null | undefined): Date {
+  const hh = String(hour).padStart(2, "0");
+  const mm = String(minute).padStart(2, "0");
+  return fromZonedTime(`${date}T${hh}:${mm}:00`, validTimeZone(timeZone));
+}
+
+/** Day of the week of a calendar date, 0 for Sunday. */
+export function weekdayOf(date: string): number {
+  return new Date(`${date}T12:00:00Z`).getUTCDay();
+}

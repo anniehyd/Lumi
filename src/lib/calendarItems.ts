@@ -1,3 +1,4 @@
+import { DEFAULT_TIMEZONE, addCalendarDays, atLocalTime, localDate, weekdayOf } from "@/lib/zonedTime";
 import type { MockEvent } from "@/lib/mock/events";
 
 /**
@@ -108,30 +109,21 @@ const DEMO_WEEK: Weekly[] = [
   { weekday: 5, h: 15, m: 0, minutes: 45, title: "Coffee chat with Priya", location: "Think Coffee", category: "coffee" },
 ];
 
-function at(base: Date, weekday: number, h: number, m: number): Date {
-  const d = new Date(base);
-  d.setDate(base.getDate() + weekday);
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
 /**
  * About four things a week for six weeks, from the start of this week:
  * two lectures, a recitation, yoga, a coffee chat. Titles are the kind of
- * thing a real calendar holds and nothing that identifies anyone.
+ * thing a real calendar holds and nothing that identifies anyone. Times are
+ * New York wall-clock times whatever zone the server runs in.
  */
 export function demoGoogleCalendar(now: Date = new Date(), weeks = 6): CalendarItem[] {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay()); // Sunday
+  const today = localDate(now, DEFAULT_TIMEZONE);
+  const sunday = addCalendarDays(today, -weekdayOf(today));
   const out: CalendarItem[] = [];
   for (let w = 0; w < weeks; w++) {
-    const base = new Date(start);
-    base.setDate(start.getDate() + w * 7);
     for (const e of DEMO_WEEK) {
       // The coffee chat is a one-off in the first two weeks, not a standing meeting.
       if (e.category === "coffee" && w > 1) continue;
-      const s = at(base, e.weekday, e.h, e.m);
+      const s = atLocalTime(addCalendarDays(sunday, w * 7 + e.weekday), e.h, e.m, DEFAULT_TIMEZONE);
       out.push({
         id: `demo-${w}-${e.weekday}-${e.h}${e.m}`,
         title: e.title,

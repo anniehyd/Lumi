@@ -2,6 +2,8 @@
 // Demonstrates Lumi's hardest case: one email → multiple events +
 // deadlines + non-event announcements to filter out.
 
+import { DEFAULT_TIMEZONE, addCalendarDays, atLocalTime, localDate } from "@/lib/zonedTime";
+
 export type EventStatus = "PENDING" | "ACCEPTED" | "MAYBE" | "DECLINED";
 export type DetectionMethod = "ICS" | "SCHEMA_ORG" | "KEYWORD" | "LLM" | "MANUAL";
 export type EventKind = "MEETING" | "INFO_SESSION" | "DEADLINE" | "COFFEE_CHAT";
@@ -44,6 +46,13 @@ export type MockEmail = {
   extractedEventIds: string[];
   ignoredSnippets: string[]; // non-event content Lumi filtered out
 };
+
+// Weekday names for emails whose events are dated relative to today, so the
+// email and the event it produced always agree.
+function weekdayIn(days: number): string {
+  const date = addCalendarDays(localDate(new Date(), DEFAULT_TIMEZONE), days);
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+}
 
 export const mockEmails: MockEmail[] = [
   {
@@ -153,16 +162,16 @@ Every Tuesday, 4–6 PM, Bobst LL1. No RSVP needed.`,
     id: "email_qfs_optiver",
     from: "qfs@nyu.edu",
     fromName: "NYU Quant Finance Society",
-    subject: "Optiver Info Session — Wednesday 7 PM, Paulson Auditorium",
+    subject: `Optiver Info Session — ${weekdayIn(3)} 7 PM, Paulson Auditorium`,
     receivedAt: daysAgo(0, 9),
-    preview: "Optiver is on campus Wednesday to talk about their trading and software internships. Pizza provided.",
+    preview: `Optiver is on campus ${weekdayIn(3)} to talk about their trading and software internships. Pizza provided.`,
     bodyText: `QFS members,
 
-Optiver, the Amsterdam market maker, is hosting an info session on campus this Wednesday at 7:00 PM in Paulson Auditorium (Tisch Hall, 40 West 4th Street). They are recruiting for software engineering and quantitative trading internships for summer 2027. Bring questions; recruiters stay after for a Q&A.
+Optiver, the Amsterdam market maker, is hosting an info session on campus this ${weekdayIn(3)} at 7:00 PM in Paulson Auditorium (Tisch Hall, 40 West 4th Street). They are recruiting for software engineering and quantitative trading internships for summer 2027. Bring questions; recruiters stay after for a Q&A.
 
 Pizza provided. RSVP so we can get the headcount right.
 
-Also this week: Fixed Income Intro (Tuesday, 6 PM, T-201) and Morgan Stanley Sales & Trading overview (Thursday, 5 PM, KMC 2-60).`,
+Also this week: Fixed Income Intro (${weekdayIn(2)}, 6 PM, T-201) and Morgan Stanley Sales & Trading overview (${weekdayIn(4)}, 5 PM, KMC 2-60).`,
     extractedEventIds: ["evt_optiver", "evt_fixed_income", "evt_morgan_stanley"],
     ignoredSnippets: [],
   },
@@ -298,19 +307,15 @@ Hear from the technology, marketing and operations teams about summer internship
 
 const wassermanUnionSquare = "726 Broadway, New York, NY 10003";
 
-// Demo dates are relative to "now" so the feed (future events only) never goes stale.
+// Demo dates are relative to "now" so the feed (future events only) never goes
+// stale. Hours are New York wall-clock times: the server runs in UTC, and
+// setHours there put "noon" at 7 AM for anyone reading the demo in New York.
 function daysAgo(days: number, hour: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  d.setHours(hour, 0, 0, 0);
-  return d.toISOString();
+  return atLocalTime(addCalendarDays(localDate(new Date(), DEFAULT_TIMEZONE), -days), hour, 0, DEFAULT_TIMEZONE).toISOString();
 }
 
 function inDays(days: number, hour: number, minute = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
+  return atLocalTime(addCalendarDays(localDate(new Date(), DEFAULT_TIMEZONE), days), hour, minute, DEFAULT_TIMEZONE).toISOString();
 }
 
 export const mockEvents: MockEvent[] = [
