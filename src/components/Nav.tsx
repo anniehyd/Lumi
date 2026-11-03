@@ -24,7 +24,9 @@ export function Nav({ pendingCount, maybeCount }: { pendingCount?: number; maybe
 
   return (
     <header className="sticky top-0 z-50 bg-lumi-bg/85 backdrop-blur-lg">
-      <div className="max-w-6xl mx-auto px-6 sm:px-10 py-5 flex items-center justify-between gap-4 flex-wrap">
+      {/* Phones: logo, count and avatar on one row, the links on a second.
+          From sm up: one row, links in the middle. */}
+      <div className="max-w-6xl mx-auto px-6 sm:px-10 pt-4 pb-3 sm:py-5 flex items-center justify-between gap-x-4 gap-y-3 flex-wrap">
         <Link
           href="/dashboard"
           className="font-serif font-serif-soft text-[26px] font-semibold tracking-[-0.02em] text-lumi-text"
@@ -32,7 +34,7 @@ export function Nav({ pendingCount, maybeCount }: { pendingCount?: number; maybe
           Lumi<span className="text-lumi-accent">.</span>
         </Link>
 
-        <nav className="flex items-center gap-6 text-sm font-medium">
+        <nav className="order-last sm:order-none w-full sm:w-auto flex items-center gap-6 text-sm font-medium">
           {links.map(({ href, label }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
@@ -49,7 +51,7 @@ export function Nav({ pendingCount, maybeCount }: { pendingCount?: number; maybe
 
         <div className="flex items-center gap-3">
           {pillLabel(pendingCount, maybeCount) && (
-            <span className="rounded-full bg-lumi-text px-4 py-2 text-sm font-semibold text-white">
+            <span className="rounded-full bg-lumi-text px-3 py-1.5 text-[13px] sm:px-4 sm:py-2 sm:text-sm font-semibold text-white whitespace-nowrap">
               {pillLabel(pendingCount, maybeCount)}
             </span>
           )}

@@ -322,7 +322,7 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
 
         {/* Action bar */}
         <div className="sticky bottom-0 mt-12 -mx-6 px-6 py-4 border-t border-lumi-border bg-lumi-bg/90 backdrop-blur-lg">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="text-xs text-lumi-muted">
               {status === "PENDING" ? (
                 "Decide once — Lumi will sync to your calendar."
@@ -332,14 +332,14 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 md:flex md:shrink-0 md:items-center md:justify-end">
               {saveMutation.isSuccess && !hasEdits && (
-                <span className="text-xs text-lumi-green">Saved</span>
+                <span className="order-5 col-span-2 md:order-none text-xs text-lumi-green">Saved</span>
               )}
               <button
                 onClick={() => saveMutation.mutate()}
                 disabled={!hasEdits || saveMutation.isPending}
-                className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                className="order-3 md:order-none flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
               >
                 {saveMutation.isPending ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -350,28 +350,28 @@ export default function EventDetail({ params }: { params: Promise<{ id: string }
               </button>
               <a
                 href={`/api/events/${event.id}/ics`}
-                className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text transition-colors"
+                className="order-4 md:order-none flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 .ics
               </a>
               <button
                 onClick={() => handleAction("DECLINED")}
-                className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text transition-colors"
+                className="order-2 md:order-none flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
                 Decline
               </button>
               <button
                 onClick={() => handleAction("MAYBE")}
-                className="flex items-center gap-1.5 rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text transition-colors"
+                className="order-1 md:order-none flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-lumi-border px-3 py-2 text-xs font-medium text-lumi-muted hover:text-lumi-text transition-colors"
               >
                 <CircleHelp className="w-3.5 h-3.5" />
                 Maybe
               </button>
               <button
                 onClick={() => handleAction("ACCEPTED")}
-                className="flex items-center gap-1.5 rounded-lg bg-lumi-accent px-4 py-2 text-xs font-semibold text-lumi-bg hover:bg-lumi-accent-hover transition-colors"
+                className="order-first col-span-2 md:order-none md:col-span-1 flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-lumi-accent px-4 py-2.5 md:py-2 text-sm md:text-xs font-semibold text-lumi-bg hover:bg-lumi-accent-hover transition-colors"
               >
                 <Check className="w-3.5 h-3.5" />
                 Attend & add to calendar

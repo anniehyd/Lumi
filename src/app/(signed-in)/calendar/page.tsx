@@ -296,7 +296,7 @@ function Schedule({ items }: { items: CalendarItem[] }) {
               <h2 className="pt-8 pb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-lumi-subtle first:pt-0">{label}</h2>
             )}
             <section className="grid grid-cols-[72px_1fr] sm:grid-cols-[120px_1fr] gap-x-6 border-t border-lumi-border py-5">
-              <div className="flex sm:flex-col items-baseline sm:items-start gap-2 sm:gap-0">
+              <div className="flex flex-col items-start">
                 <div
                   className={`font-serif font-serif-soft text-[40px] sm:text-[48px] leading-none tracking-[-0.03em] ${
                     isToday ? "text-lumi-accent" : "text-lumi-text"
@@ -304,8 +304,15 @@ function Schedule({ items }: { items: CalendarItem[] }) {
                 >
                   {date.getDate()}
                 </div>
-                <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-lumi-subtle sm:mt-2">
-                  {isToday ? "Today" : date.toLocaleDateString("en-US", { weekday: "long" })}
+                <div className="mt-1.5 sm:mt-2 text-[11px] font-bold uppercase tracking-[0.1em] text-lumi-subtle">
+                  {isToday ? (
+                    "Today"
+                  ) : (
+                    <>
+                      <span className="sm:hidden">{date.toLocaleDateString("en-US", { weekday: "short" })}</span>
+                      <span className="hidden sm:inline">{date.toLocaleDateString("en-US", { weekday: "long" })}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
