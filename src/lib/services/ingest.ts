@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { listMessages, fetchMessage, type ParsedMessage } from "@/lib/services/gmail";
+import { unwrapForwarded } from "@/lib/services/inbound";
 import { processEmail, persistEvents, type PipelineResult } from "@/lib/services/detect";
 import { fetchHandshakeEvents, HandshakeFeedError } from "@/lib/services/handshake";
 import { contentHash } from "@/lib/detection/prefilter";
@@ -80,7 +81,12 @@ export async function ingestUser(
     }
     if (!parsed) continue;
 
-    const stored = await storeAndDetect(userId, parsed, counters);
+    // A newsletter someone forwarded by hand into this inbox ("Fwd: …") names
+    // the forwarder in From and hides the original inside the body. Detection
+    // and the sender-history rule key on the original sender, so recover it
+    // here exactly as the inbound-forwarding route does; auto-forwarded and
+    // ordinary mail pass through untouched.
+    const stored = await storeAndDetect(userId, unwrapForwarded(parsed), counters);
     if (!stored.stored) continue;
     result.newEmails++;
     if (!stored.outcome) {

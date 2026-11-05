@@ -115,6 +115,33 @@ describe("ingestUser", () => {
     expect(result).toMatchObject({ fetched: 2, newEmails: 1 });
   });
 
+  it("stores a hand-forwarded newsletter under its original sender and subject", async () => {
+    gmail.listMessages.mockResolvedValue(["fwd"]);
+    gmail.fetchMessage.mockResolvedValue(
+      parsed("fwd", {
+        from: "Student <student@nyu.edu>",
+        subject: "Fwd: Fall Tech Fair",
+        bodyText:
+          "FYI\n\n---------- Forwarded message ---------\nFrom: NYU Careers <careers@nyu.edu>\nDate: Tue, Sep 15, 2099 at 8:00 AM\nSubject: Fall Tech Fair, Sept 24 at 1pm\nTo: <student@nyu.edu>\n\n\nJoin us on September 24.\n",
+      })
+    );
+
+    await ingestUser("u1");
+
+    expect(db.email.create).toHaveBeenCalledTimes(1);
+    expect(db.email.create.mock.calls[0][0].data).toMatchObject({
+      gmailId: "fwd",
+      from: "NYU Careers <careers@nyu.edu>",
+      subject: "Fall Tech Fair, Sept 24 at 1pm",
+      bodyText: "Join us on September 24.\n",
+    });
+    expect(pipeline.processEmail).toHaveBeenCalledWith(
+      "u1",
+      expect.anything(),
+      expect.objectContaining({ from: "NYU Careers <careers@nyu.edu>" })
+    );
+  });
+
   it("treats a unique-key collision as already ingested", async () => {
     gmail.listMessages.mockResolvedValue(["a"]);
     db.email.create.mockRejectedValue(
