@@ -24,6 +24,7 @@ import { listCalendarWindow, findConflict } from "@/lib/services/calendar";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { grantsFromScope } from "@/lib/googleScopes";
+import { isPaused } from "@/lib/limits";
 
 const WINDOW_DAYS = 14;
 const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -131,7 +132,10 @@ export async function runIngestJob(job: IngestJob) {
  * Who the sweep serves: anyone who granted Gmail access (the inbox is
  * polled) or has a forwarding address (mail is pushed; only the retry and
  * Handshake steps apply). Signing in alone grants nothing, so a user with
- * neither has no mail source and is left alone.
+ * neither has no mail source and is left alone. So is anyone who has not
+ * opened Lumi in LUMI_PAUSE_AFTER_DAYS: reading and scoring mail for someone
+ * who is not looking is the one cost that grows with sign-ups instead of with
+ * use. When they return, the dashboard's stale-scan line offers Scan now.
  */
 async function sweepUsers(): Promise<{ id: string; gmail: boolean }[]> {
   const users = await prisma.user.findMany({
@@ -141,10 +145,15 @@ async function sweepUsers(): Promise<{ id: string; gmail: boolean }[]> {
     select: {
       id: true,
       forwardingToken: true,
+      lastSeenAt: true,
       accounts: { where: { provider: "google" }, select: { scope: true }, take: 1 },
     },
   });
-  return users
+  const active = users.filter((u) => !isPaused(u.lastSeenAt));
+  if (active.length < users.length) {
+    console.log(`[sweep] ${users.length - active.length} idle user(s) paused`);
+  }
+  return active
     .map((u) => ({ id: u.id, gmail: grantsFromScope(u.accounts[0]?.scope).gmail, forwards: !!u.forwardingToken }))
     .filter((u) => u.gmail || u.forwards)
     .map(({ id, gmail }) => ({ id, gmail }));

@@ -39,6 +39,7 @@ export default function SettingsPage() {
 
         <Section title="Account">
           <AccountRow />
+          {signedIn && <DeleteAccountRow />}
         </Section>
 
         <Section title="Email source">
@@ -105,6 +106,70 @@ function AccountRow() {
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Leaving for good. One request deletes the account and everything stored
+ * under it and hands Google back its permission; there is no grace period to
+ * explain, so the confirmation is typed, not clicked.
+ */
+function DeleteAccountRow() {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const remove = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/account", { method: "DELETE" });
+      if (!res.ok) throw new Error(`delete failed (${res.status})`);
+    },
+    onSuccess: () => signOut({ callbackUrl: "/?deleted=1" }),
+  });
+  return (
+    <Row
+      label="Delete account"
+      sub="Removes your account, every stored email and event, your feed and forwarding addresses, and Lumi's access to Gmail and Google Calendar. Events already written to your Google Calendar stay there. This cannot be undone."
+    >
+      {open ? (
+        <div className="flex flex-col items-end gap-2">
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Type delete to confirm"
+            aria-label="Type delete to confirm"
+            autoFocus
+            className="w-52 rounded-full border border-lumi-border bg-lumi-bg px-4 py-2 text-sm text-lumi-text placeholder:text-lumi-subtle focus:outline-none focus:border-lumi-rose"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setOpen(false);
+                setTyped("");
+              }}
+              className="text-sm font-semibold text-lumi-muted hover:text-lumi-text"
+            >
+              Keep my account
+            </button>
+            <button
+              disabled={typed.trim().toLowerCase() !== "delete" || remove.isPending}
+              onClick={() => remove.mutate()}
+              className="rounded-full bg-lumi-rose px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {remove.isPending ? "Deleting…" : "Delete everything"}
+            </button>
+          </div>
+          {remove.isError && (
+            <p className="text-xs text-lumi-rose">That did not go through. Nothing was deleted; try again.</p>
+          )}
+        </div>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-sm font-semibold text-lumi-muted hover:text-lumi-rose transition-colors"
+        >
+          Delete account…
+        </button>
+      )}
+    </Row>
   );
 }
 

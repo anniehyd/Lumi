@@ -1,5 +1,8 @@
 # Deploying Lumi to AWS (single EC2 box)
 
+> Opening a deployment to the public (publishing the Google OAuth app, the
+> sign-up cap, the operator view) is covered in [docs/LAUNCH.md](docs/LAUNCH.md).
+
 Stack: one t3.small running docker compose — Next.js app, BullMQ worker
 (scans Gmail at the times in `INGEST_SWEEP_TIMES`), Postgres, Redis, and Caddy
 terminating HTTPS for a DuckDNS domain.

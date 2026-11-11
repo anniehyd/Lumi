@@ -4,6 +4,12 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 import { withRetry } from "@/lib/retry";
 import { SIGN_IN_SCOPES, grantsFromScope, mergeScopes, type GoogleGrants } from "@/lib/googleScopes";
+import { hasRoomForNewUser } from "@/lib/limits";
+import { isAdminEmail } from "@/lib/adminAccess";
+
+// How often a live session re-stamps User.lastSeenAt. The stamp only has to
+// tell "this week" from "weeks ago", so one write per half day is plenty.
+const SEEN_STAMP_MS = 12 * 60 * 60 * 1000;
 
 // Demo mode has no Google OAuth configured, so sign-in is impossible and the
 // secret only signs empty-session cookies — a static fallback keeps
@@ -38,9 +44,42 @@ export const authOptions: NextAuthOptions = {
   ],
   session: { strategy: "database" },
   callbacks: {
+    /**
+     * The door. Anyone with a Google account may sign in — there is no list
+     * to be on — until the deployment holds LUMI_MAX_USERS accounts. After
+     * that only people who already have one get in; a newcomer is sent back
+     * to the landing page, which says the beta is full.
+     */
+    async signIn({ account }) {
+      if (!account) return true;
+      try {
+        const known = await prisma.account.findUnique({
+          where: {
+            provider_providerAccountId: {
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+            },
+          },
+          select: { id: true },
+        });
+        if (known) return true;
+      } catch {
+        return true;
+      }
+      return (await hasRoomForNewUser()) ? true : "/?full=1";
+    },
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
+        session.user.isAdmin = isAdminEmail(user.email);
+      }
+      const seen = (user as { lastSeenAt?: Date | null }).lastSeenAt;
+      if (!seen || Date.now() - new Date(seen).getTime() > SEEN_STAMP_MS) {
+        // Not awaited into the response path's failure modes: a missed stamp
+        // costs nothing, a thrown one would sign the user out.
+        await prisma.user
+          .update({ where: { id: user.id }, data: { lastSeenAt: new Date() } })
+          .catch(() => {});
       }
       return session;
     },

@@ -172,6 +172,31 @@ describe("runSweep — forwarding-only users", () => {
   });
 });
 
+describe("runSweep — idle users", () => {
+  const GRANT = "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events";
+  const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+
+  beforeEach(() => {
+    delete process.env.LUMI_PAUSE_AFTER_DAYS;
+    db.user.findMany.mockResolvedValue([
+      { id: "here", forwardingToken: null, lastSeenAt: daysAgo(2), accounts: [{ scope: GRANT }] },
+      { id: "gone", forwardingToken: null, lastSeenAt: daysAgo(30), accounts: [{ scope: GRANT }] },
+      { id: "old-row", forwardingToken: null, lastSeenAt: null, accounts: [{ scope: GRANT }] },
+    ]);
+  });
+
+  it("reads mail only for people who have opened Lumi lately", async () => {
+    await runSweep();
+    expect(ingest.ingestUser.mock.calls.map((c) => c[0])).toEqual(["here", "old-row"]);
+  });
+
+  it("sweeps everyone when the pause is switched off", async () => {
+    process.env.LUMI_PAUSE_AFTER_DAYS = "0";
+    await runSweep();
+    expect(ingest.ingestUser.mock.calls.map((c) => c[0])).toEqual(["here", "gone", "old-row"]);
+  });
+});
+
 describe("runIngestJob", () => {
   it("runs the Gmail step unless the job says there is no Gmail", async () => {
     await runIngestJob({ userId: "u1" });

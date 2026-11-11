@@ -23,6 +23,11 @@ primary_region = "ewr"
   LUMI_USE_MOCK_FALLBACK = "false"
   INGEST_MODE = "inline"
   LUMI_DEMO_URL = "https://lumi-demo.fly.dev"
+  # Cost ceiling for open sign-in (src/lib/limits.ts). ADMIN_EMAILS is a
+  # secret, not listed here: fly secrets set ADMIN_EMAILS=you@example.com
+  LUMI_MAX_USERS = "100"
+  LUMI_USER_DAILY_USD = "0.50"
+  LUMI_PAUSE_AFTER_DAYS = "14"
 
 [http_service]
   internal_port = 3000

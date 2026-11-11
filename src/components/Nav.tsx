@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 
 const links = [
   { href: "/dashboard", label: "Today" },
@@ -55,20 +56,106 @@ export function Nav({ pendingCount, maybeCount }: { pendingCount?: number; maybe
               {pillLabel(pendingCount, maybeCount)}
             </span>
           )}
-          {userImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={userImage} alt="" className="w-9 h-9 rounded-full border border-lumi-border" />
-          ) : (
-            <span
-              title={userEmail}
-              className="w-9 h-9 rounded-full bg-lumi-surface border border-lumi-border flex items-center justify-center text-xs font-semibold text-lumi-muted"
-            >
-              {userEmail.charAt(0).toUpperCase()}
-            </span>
-          )}
+          <AccountMenu
+            email={session?.user?.email ?? null}
+            name={session?.user?.name ?? null}
+            image={userImage}
+            isAdmin={Boolean(session?.user?.isAdmin)}
+            fallback={userEmail}
+          />
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * The avatar, and for a signed-in user the menu behind it: who they are
+ * signed in as, the operator view when it is theirs to see, and the way out.
+ * In demo mode there is no account, so the avatar is only a label.
+ */
+function AccountMenu({
+  email,
+  name,
+  image,
+  isAdmin,
+  fallback,
+}: {
+  email: string | null;
+  name: string | null;
+  image: string | null;
+  isAdmin: boolean;
+  fallback: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const face = image ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={image} alt="" className="w-9 h-9 rounded-full border border-lumi-border" />
+  ) : (
+    <span className="w-9 h-9 rounded-full bg-lumi-surface border border-lumi-border flex items-center justify-center text-xs font-semibold text-lumi-muted">
+      {fallback.charAt(0).toUpperCase()}
+    </span>
+  );
+
+  if (!email) return <span title={fallback}>{face}</span>;
+
+  const item = "block w-full text-left px-4 py-2.5 text-sm font-medium text-lumi-text hover:bg-lumi-surface transition-colors";
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Account: ${email}`}
+        className="block rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-lumi-accent focus-visible:ring-offset-2"
+      >
+        {face}
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-lumi-border bg-lumi-bg shadow-[0_18px_40px_-20px_rgba(17,17,17,0.35)]"
+        >
+          <div className="px-4 py-3 border-b border-lumi-border">
+            {name && <div className="text-sm font-semibold text-lumi-text truncate">{name}</div>}
+            <div className="text-xs text-lumi-muted truncate">{email}</div>
+          </div>
+          <Link href="/settings" role="menuitem" className={item} onClick={() => setOpen(false)}>
+            Settings
+          </Link>
+          {isAdmin && (
+            <Link href="/admin" role="menuitem" className={item} onClick={() => setOpen(false)}>
+              Operator view
+            </Link>
+          )}
+          <button
+            role="menuitem"
+            onClick={() => signOut({ callbackUrl: "/" })}
+            className={`${item} border-t border-lumi-border text-lumi-muted hover:text-lumi-rose`}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

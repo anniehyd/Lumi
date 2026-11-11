@@ -15,7 +15,19 @@ import { StarCursor } from "@/components/StarCursor";
  * on the live deployment, where /dashboard would only bounce a visitor to
  * sign-in. The server page reads it from the environment.
  */
-export function Landing({ demoBase = "" }: { demoBase?: string }) {
+const NOTICES = {
+  full: "Every place in the beta is taken right now, so new accounts are closed. The demo below is open to everyone; if you already have an account, signing in still works.",
+  deleted: "Your account and everything stored under it have been deleted, and Lumi's access to your Google account has been revoked.",
+} as const;
+
+export function Landing({
+  demoBase = "",
+  notice = null,
+}: {
+  demoBase?: string;
+  /** A one-line message from the server: the beta is full, or an account was just deleted. */
+  notice?: keyof typeof NOTICES | null;
+}) {
   const start = () => signIn("google", { callbackUrl: "/dashboard" });
   const demo = `${demoBase}/dashboard`;
   const poll = `${demoBase}/meet/demo-study-group`;
@@ -23,6 +35,12 @@ export function Landing({ demoBase = "" }: { demoBase?: string }) {
   return (
     <div className="lumi-custom-cursor min-h-screen flex flex-col bg-lumi-bg">
       <StarCursor />
+
+      {notice && (
+        <p role="status" className="bg-lumi-mark px-6 sm:px-10 py-3 text-center text-sm font-medium text-lumi-text">
+          {NOTICES[notice]}
+        </p>
+      )}
 
       <header className="sticky top-0 z-50 bg-lumi-bg/85 backdrop-blur-lg">
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-5 flex items-center justify-between gap-4">
@@ -228,6 +246,12 @@ export function Landing({ demoBase = "" }: { demoBase?: string }) {
         <div className="max-w-[1040px] mx-auto px-6 sm:px-10 py-6 flex flex-wrap items-center justify-between gap-4 text-xs text-lumi-subtle">
           <span>Lumi · Open source · MIT</span>
           <span className="flex gap-5">
+            <Link href="/privacy" className="hover:text-lumi-text">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-lumi-text">
+              Terms
+            </Link>
             <a href="https://github.com/anniehyd/Lumi" target="_blank" rel="noreferrer" className="hover:text-lumi-text">
               GitHub
             </a>

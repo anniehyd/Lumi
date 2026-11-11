@@ -396,3 +396,25 @@ describe("persistEvents — time zones", () => {
     expect(db.event.create).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("processEmail — daily model budget", () => {
+  it("stops calling the model once the user's day has cost the cap", async () => {
+    process.env.LUMI_USER_DAILY_USD = "0.002";
+    try {
+      // A user id no other test spends against, so the tally starts at zero.
+      const first = await processEmail("budget-user", "b1", message());
+      expect(first.llm.called).toBe(true);
+      const second = await processEmail("budget-user", "b2", message({ bodyText: "Panel on Sept 18 at 5pm." }));
+      expect(second.llm.called).toBe(true);
+      // 2 × $0.0015 has passed $0.002: the third never reaches the model.
+      const third = await processEmail("budget-user", "b3", message({ bodyText: "Mixer on Sept 19 at 7pm." }));
+      expect(third.skip).toBe("budget");
+      expect(extract).toHaveBeenCalledTimes(2);
+      // Somebody else's mail is unaffected.
+      const other = await processEmail("other-user", "b4", message());
+      expect(other.llm.called).toBe(true);
+    } finally {
+      delete process.env.LUMI_USER_DAILY_USD;
+    }
+  });
+});

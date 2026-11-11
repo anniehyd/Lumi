@@ -7,6 +7,8 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      /** True when the address is listed in ADMIN_EMAILS. */
+      isAdmin?: boolean;
     };
   }
 }

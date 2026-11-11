@@ -15,7 +15,7 @@ import { useQuery } from "@tanstack/react-query";
  * Mounted globally in Providers. It renders nothing and is inert on the public
  * landing page and on /onboarding itself.
  */
-const EXEMPT = ["/", "/onboarding"];
+const EXEMPT = ["/", "/onboarding", "/privacy", "/terms"];
 
 export function OnboardingGate() {
   const { status } = useSession();

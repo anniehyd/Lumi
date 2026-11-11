@@ -8,7 +8,16 @@ export const dynamic = "force-dynamic";
  * slash). Unset, the links stay on this host, which is right for local dev
  * and for the demo deployment itself.
  */
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const demoBase = (process.env.LUMI_DEMO_URL ?? "").trim().replace(/\/+$/, "");
-  return <Landing demoBase={demoBase} />;
+  // Two reasons someone lands here with a message waiting: sign-in turned
+  // them away because every place is taken (src/lib/auth.ts), or they just
+  // deleted their account.
+  const params = await searchParams;
+  const notice = params.full ? "full" : params.deleted ? "deleted" : null;
+  return <Landing demoBase={demoBase} notice={notice} />;
 }

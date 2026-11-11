@@ -59,6 +59,13 @@ model User {
   // When Gmail was last pulled for this user, by the sweep or Scan now. Null
   // until the first pull. The dashboard warns when it is more than a day old.
   lastScanAt       DateTime?
+  // When the account was created. Rows older than the column carry the day it
+  // was added instead.
+  createdAt        DateTime  @default(now())
+  // Last time this user had a live session, stamped at most twice a day
+  // (src/lib/auth.ts). The scheduled sweep leaves out anyone who has been
+  // away longer than LUMI_PAUSE_AFTER_DAYS; null counts as active.
+  lastSeenAt       DateTime?
   // What this user wants Lumi to surface. Shape: src/lib/profile.ts UserProfile.
   // Null falls back to DEFAULT_PROFILE so extraction never breaks on a new user.
   profile          Json?

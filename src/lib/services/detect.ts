@@ -20,6 +20,7 @@ import { extractEventsDetailed, activeModel, activePromptVersion, clampRelevance
 import { normalizeProfile } from "@/lib/profile";
 import type { ExtractedEvent } from "@/lib/detection/types";
 import { summaryFor } from "@/lib/brief";
+import { noteSpend, withinDailyBudget } from "@/lib/limits";
 
 export type PipelineMessage = {
   bodyText: string;
@@ -41,8 +42,12 @@ export type PipelineResult = {
   found: number;
   /** Which tier produced them; null when the email was skipped. */
   tier: "ICS" | "SCHEMA_ORG" | "LLM" | null;
-  /** Why the model was not called, when it was not. */
-  skip: "keyword" | SkipReason | null;
+  /**
+   * Why the model was not called, when it was not. "budget" is the one reason
+   * that is about the user rather than the email: their model spend for the
+   * day reached LUMI_USER_DAILY_USD (src/lib/limits.ts).
+   */
+  skip: "keyword" | "budget" | SkipReason | null;
   /** Whether a model call was made, and what it cost. */
   llm: { called: boolean; inputTokens: number; outputTokens: number; usd: number };
 };
@@ -135,6 +140,10 @@ export async function processEmail(
     return skipped("sender_history");
   }
 
+  // The last free check: one user's inbox must not be able to run up the
+  // bill. Everything above this line costs nothing, so it still ran.
+  if (!(await withinDailyBudget(userId))) return skipped("budget");
+
   // Tier 4 — LLM extraction, scored against this user's own interests.
   const row = await prisma.user.findUnique({
     where: { id: userId },
@@ -154,6 +163,7 @@ export async function processEmail(
     outputTokens: extraction.usage.outputTokens,
     usd: extraction.usd ?? 0,
   };
+  noteSpend(userId, llm.usd);
 
   if (extraction.called && senderHistoryEnabled()) {
     await prisma.senderStat.upsert({
